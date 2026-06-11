@@ -178,6 +178,17 @@ elif menu == "My Predictions":
                     save_db(db)
                     st.success(f"Updated successfully for {part_dict[selected_id]}!")
                     st.rerun()
+
+            # --- NEW: Clear Scores Button ---
+            st.markdown("---")
+            st.markdown("#### Danger Zone")
+            if st.button(f"🗑️ Clear All Predictions for {part_dict[selected_id]}", type="primary", use_container_width=True):
+                # Filter out the predictions for the currently selected user
+                db["predictions"] = [p for p in db["predictions"] if p["participantId"] != selected_id]
+                save_db(db)
+                st.warning(f"All logged predictions for {part_dict[selected_id]} have been wiped.")
+                st.rerun()
+
         else:
             for f in fixtures:
                 curr = saved_preds_dict.get((selected_id, f["id"]))
