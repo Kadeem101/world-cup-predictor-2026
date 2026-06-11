@@ -131,7 +131,7 @@ if menu == "Leaderboard":
         for f in pending_matches:
             with st.container(border=True):
                 st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
-                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}")
+                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
     else:
         st.caption("No upcoming matches scheduled.")
 
@@ -194,7 +194,7 @@ elif menu == "My Predictions":
                 curr = saved_preds_dict.get((selected_id, f["id"]))
                 with st.container(border=True):
                     st.caption(f"{format_date(f['date'])}")
-                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
+                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
                     if curr and curr.get('scoreA') is not None and curr.get('scoreB') is not None:
                         st.success(f"Prediction: **{get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}**")
                     else:
@@ -250,7 +250,7 @@ elif menu == "Manage Games":
         for f in db.get("fixtures", []):
             with st.container(border=True):
                 st.caption(f"{f['phase']} | {format_date(f['date'])}")
-                st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
+                st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
                 
                 c_sa, c_sb = st.columns(2)
                 with c_sa: 
