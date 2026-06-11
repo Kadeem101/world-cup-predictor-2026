@@ -62,52 +62,16 @@
     ],
     "predictions": [
         {
-            "participantId": "p_1780732052",
-            "fixtureId": "f_1780732281",
-            "scoreA": 2,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732052",
-            "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732058",
-            "fixtureId": "f_1780732281",
-            "scoreA": 3,
-            "scoreB": 2
-        },
-        {
-            "participantId": "p_1780732058",
-            "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732068",
-            "fixtureId": "f_1780732281",
-            "scoreA": 1,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732068",
-            "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
-        },
-        {
             "participantId": "p_1780732046",
             "fixtureId": "f_1780732281",
-            "scoreA": 4,
-            "scoreB": 2
+            "scoreA": null,
+            "scoreB": null
         },
         {
             "participantId": "p_1780732046",
             "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
+            "scoreA": null,
+            "scoreB": null
         },
         {
             "participantId": "p_1780732046",
@@ -116,22 +80,76 @@
             "scoreB": null
         },
         {
+            "participantId": "p_1780732052",
+            "fixtureId": "f_1780732281",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732052",
+            "fixtureId": "f_1780733456",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732052",
+            "fixtureId": "f_1780734653",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732058",
+            "fixtureId": "f_1780732281",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732058",
+            "fixtureId": "f_1780733456",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732058",
+            "fixtureId": "f_1780734653",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732068",
+            "fixtureId": "f_1780732281",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732068",
+            "fixtureId": "f_1780733456",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780732068",
+            "fixtureId": "f_1780734653",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780732281",
-            "scoreA": 3,
-            "scoreB": 3
+            "scoreA": null,
+            "scoreB": null
         },
         {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780733456",
-            "scoreA": 5,
-            "scoreB": 9
+            "scoreA": null,
+            "scoreB": null
         },
         {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780734653",
-            "scoreA": 0,
-            "scoreB": 0
+            "scoreA": null,
+            "scoreB": null
         }
     ],
     "teams": [
