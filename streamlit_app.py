@@ -63,7 +63,7 @@ def compute_points(pred_A, pred_B, act_A, act_B):
     if act_outcome == pred_outcome: return 4 if pA == aA and pB == aB else 3
     return 0
 
-# --- APP START ---
+# --- START UP ---
 st.set_page_config(page_title="WC2026", layout="wide", initial_sidebar_state="collapsed")
 db = load_db()
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
@@ -79,15 +79,14 @@ if view_mode == "🛡️ Admin Console" and not st.session_state.admin_authentic
 
 menu = st.sidebar.radio("Navigation", ["Leaderboard", "My Forecasts"] + (["Manage Games", "Participants", "Share & Export"] if is_admin else []))
 
-# --- TAB 1: LEADERBOARD ---
+# --- TAB: LEADERBOARD ---
 if menu == "Leaderboard":
     st.title("🏆 Leaderboard")
-    # ... (Leaderboard dataframe logic remains same)
     
     st.subheader("🟢 Finished Matches")
     with st.expander("Show/Hide Finished Matches"):
         for f in [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]:
-            st.markdown(f"**{f['teamA']} {f['scoreA']}-{f['scoreB']} {f['teamB']}**", unsafe_allow_html=True)
+            st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} **{f['scoreA']}-{f['scoreB']}** {f['teamB']} {get_flag(f['teamB'])}")
 
     st.subheader("⏳ Upcoming")
     for f in [f for f in db.get("fixtures", []) if f["status"] == "PENDING"]:
@@ -95,7 +94,7 @@ if menu == "Leaderboard":
             st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
             st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}")
 
-# --- TAB 2: MY FORECASTS ---
+# --- TAB: MY FORECASTS ---
 elif menu == "My Forecasts":
     st.title("📝 My Forecasts")
     part_dict = {p["id"]: p["name"] for p in db.get("participants", [])}
@@ -108,10 +107,10 @@ elif menu == "My Forecasts":
         with st.container(border=True):
             st.caption(f"{format_date(f['date'])}")
             st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
-            if curr:
-                st.write(f"Predicted: {get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}")
+            if curr and curr.get('scoreA') is not None:
+                st.write(f"Forecast: {get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}")
             else:
-                st.info("No prediction yet")
+                st.info("No forecast logged")
 
 # --- OTHER TABS ---
-# (Keep previous logic for Manage Games, Participants, Share & Export)
+# (Add previous logic for Manage Games, Participants, Share & Export)
