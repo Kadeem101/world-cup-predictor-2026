@@ -38,7 +38,6 @@ FLAGS = {
 def get_flag(team):
     return FLAGS.get(team, "⚽")
 
-# Force strictly 12-hour AM/PM format
 def format_time(time_str):
     if not time_str: return "TBD"
     try:
@@ -62,7 +61,6 @@ def save_db(data):
 
 # --- POINT COMPUTATION ---
 def compute_points(pred_A, pred_B, act_A, act_B):
-    # If ANY score is missing (empty), return 0
     if act_A is None or act_B is None or pred_A is None or pred_B is None:
         return 0
     if int(pred_A) == int(act_A) and int(pred_B) == int(act_B):
@@ -73,17 +71,50 @@ def compute_points(pred_A, pred_B, act_A, act_B):
         return 2
     return 0
 
+# --- START UP ---
+st.set_page_config(page_title="WC2026 Dashboard", layout="wide", initial_sidebar_state="expanded")
 db = load_db()
 
-# --- APP LAYOUT ---
-st.set_page_config(page_title="WC2026 Prediction System", layout="wide")
-st.sidebar.title("🏆 WC2026 Tournament")
-menu = st.sidebar.radio("Navigation Menu", ["Leaderboard", "Prediction Grid", "Manage Games", "Participants", "Share & Export"])
+# --- SECURITY GATEKEEPER SYSTEM ---
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+# Sidebar Clean Styling
+st.sidebar.markdown("### 🏆 Tournament Center")
+
+# View Toggle
+view_mode = st.sidebar.selectbox("Access Level", ["👥 Public View", "🛡️ Admin Console"])
+
+# Handle Login Processing Securely
+if view_mode == "🛡️ Admin Console" and not st.session_state.admin_authenticated:
+    st.sidebar.markdown("---")
+    admin_password = st.sidebar.text_input("Admin Password", type="password", key="admin_pwd_input")
+    if st.sidebar.button("Verify Key"):
+        # Put your unique custom password here
+        if admin_password == "admin123": 
+            st.session_state.admin_authenticated = True
+            st.sidebar.success("Access Granted")
+            st.rerun()
+        else:
+            st.sidebar.error("Invalid Admin Key")
+
+# Determine Dynamic Menu Navigation Options Based on Visibility Rights
+if view_mode == "🛡️ Admin Console" and st.session_state.admin_authenticated:
+    menu = st.sidebar.radio("Control Panel", ["Leaderboard", "Prediction Grid", "Manage Games", "Participants", "Share & Export"])
+else:
+    menu = st.sidebar.radio("Dashboard Navigation", ["Leaderboard", "Prediction Grid"])
+    if view_mode == "🛡️ Admin Console":
+        st.info("Please complete authentication on the sidebar widget to reveal configuration workflows.")
+
+st.sidebar.markdown("---")
+if st.session_state.admin_authenticated:
+    if st.sidebar.button("🚪 Close Admin Session"):
+        st.session_state.admin_authenticated = False
+        st.rerun()
 
 # --- MENU TAB 1: LEADERBOARD ---
 if menu == "Leaderboard":
-    st.title("🏆 Standings Leaderboard")
-    st.markdown("Scoring: **3 points** for exact score, **2 points** for correct match outcome (Win/Loss/Draw), **0 points** otherwise.")
+    st.title("🏆 Leaderboard Rankings")
     
     leader_rows = []
     for p in db.get("participants", []):
@@ -116,92 +147,91 @@ if menu == "Leaderboard":
             "Exact Scores (3pt)": exact_count,
             "Correct Outcomes (2pt)": outcome_count,
             "Incorrect (0pt)": wrong_count,
-            "Games Checked": completed_games
+            "Matches Reviewed": completed_games
         })
         
     if leader_rows:
         df_leader = pd.DataFrame(leader_rows)
-        df_leader = df_leader.sort_values(by=["Total Points", "Exact Scores (3pt)", "Games Checked"], ascending=[False, False, True]).reset_index(drop=True)
+        df_leader = df_leader.sort_values(by=["Total Points", "Exact Scores (3pt)", "Matches Reviewed"], ascending=[False, False, True]).reset_index(drop=True)
         df_leader.index = df_leader.index + 1
         df_leader.index.name = "Rank"
         
-       # Add visual emphasis to the table
         st.dataframe(
             df_leader, 
             use_container_width=True,
             column_config={
-                "Participant": st.column_config.TextColumn("Participant"),
-                "Total Points": st.column_config.NumberColumn("Total Points", format="%d")
+                "Participant": st.column_config.TextColumn("Competitor Name"),
+                "Total Points": st.column_config.NumberColumn("Total Score", format="%d")
             }
         )
     else:
-        st.info("No participants registered yet.")
+        st.info("No competitors registered on the leaderboard database yet.")
 
-    st.markdown("---")
-    st.subheader("📋 Match Schedule & Results")
+    st.markdown("<br><hr>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2, gap="large")
     
     with col1:
-        st.markdown("#### 🟢 Finished Matches")
+        st.subheader("🟢 Finished Match Arena")
         finished_matches = [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]
         
         if not finished_matches:
-            st.caption("No matches finished yet.")
+            st.caption("No tournament matches have concluded yet.")
         else:
             for f in finished_matches:
                 st.markdown(
-                    f"<div style='margin-bottom: 10px;'>"
-                    f"<span style='font-size: 0.85em; color: #888;'>{f['phase']}</span><br>"
-                    f"<b>{get_flag(f['teamA'])} {f['teamA']} {f['scoreA']} - {f['scoreB']} {f['teamB']} {get_flag(f['teamB'])}</b>"
-                    f"</div>", 
+                    f"<div style='background-color:rgba(40,167,69,0.1); padding:12px; border-radius:8px; margin-bottom:12px; border-left: 5px solid #28a745;'>"
+                    f"<span style='font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; color: #888;'>{f['phase']}</span><br>"
+                    f"<div style='font-size: 1.15em; font-weight: 700; margin-top:4px;'>"
+                    f"{get_flag(f['teamA'])} {f['teamA']} <span style='color:#28a745;'>{f['scoreA']}</span> — <span style='color:#28a745;'>{f['scoreB']}</span> {f['teamB']} {get_flag(f['teamB'])}"
+                    f"</div></div>", 
                     unsafe_allow_html=True
                 )
                 
     with col2:
-        st.markdown("#### ⏳ Pending Matches")
+        st.subheader("⏳ Scheduled Lineups")
         pending_matches = [f for f in db.get("fixtures", []) if f["status"] == "PENDING"]
         
         if not pending_matches:
-            st.caption("No pending matches.")
+            st.caption("No future fixtures found in the system queue.")
         else:
             for f in pending_matches:
                 st.markdown(
-                    f"<div style='margin-bottom: 10px;'>"
-                    f"<span style='font-size: 0.85em; color: #888;'>{f['phase']} &nbsp;|&nbsp; {f['date']} @ {format_time(f['time'])}</span><br>"
-                    f"<b>{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}</b>"
-                    f"</div>", 
+                    f"<div style='background-color:rgba(0,0,0,0.05); padding:12px; border-radius:8px; margin-bottom:12px; border-left: 5px solid #6c757d;'>"
+                    f"<span style='font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; color: #777;'>{f['phase']} &nbsp;|&nbsp; 🗓️ {f['date']} @ {format_time(f['time'])}</span><br>"
+                    f"<div style='font-size: 1.1em; font-weight: 600; margin-top:4px; color:#ddd;'>"
+                    f"{get_flag(f['teamA'])} {f['teamA']} <span style='color:#888; font-weight:300;'>vs</span> {f['teamB']} {get_flag(f['teamB'])}"
+                    f"</div></div>", 
                     unsafe_allow_html=True
                 )
 
 # --- MENU TAB 2: PREDICTION GRID ---
 elif menu == "Prediction Grid":
-    st.title("📝 Enter Participant Predictions")
+    st.title("📝 Competitor Profiles & Forecasts")
     participants = db.get("participants", [])
     fixtures = db.get("fixtures", [])
     
     if not participants:
-        st.warning("Please add participants first via the 'Participants' tab.")
+        st.warning("No participants are enrolled. Database records are empty.")
     elif not fixtures:
-        st.warning("No matches have been created yet by the administrator.")
+        st.warning("No matches available. Create fixtures in the Match Editor tab.")
     else:
         part_dict = {p["id"]: p["name"] for p in participants}
-        selected_id = st.selectbox("Select Competitor:", list(part_dict.keys()), format_func=lambda x: part_dict[x])
+        selected_id = st.selectbox("Select Competitor Profile:", list(part_dict.keys()), format_func=lambda x: part_dict[x])
         
         preds = db.get("predictions", [])
         saved_preds_dict = {(p["participantId"], p["fixtureId"]): p for p in preds}
         
         updated_preds = []
         
-        with st.form("prediction_submission_form"):
-            st.markdown(f"#### Forecasts for: **{part_dict[selected_id]}**")
+        with st.form("prediction_submission_form", clear_on_submit=False):
+            st.markdown(f"#### Logged Predictions Matrix for: **{part_dict[selected_id]}**")
             
-            # UI Header Row
             col_h1, col_h2, col_h3, col_h4 = st.columns([2.5, 3.5, 1, 1])
-            col_h1.caption("MATCH INFO")
-            col_h2.caption("FIXTURE")
-            col_h3.caption("HOME SCORE")
-            col_h4.caption("AWAY SCORE")
+            col_h1.caption("ROUND CONTEXT")
+            col_h2.caption("UPCOMING MATCHUP")
+            col_h3.caption("HOME PREDICTION")
+            col_h4.caption("AWAY PREDICTION")
             st.divider()
 
             for f in fixtures:
@@ -221,37 +251,38 @@ elif menu == "Prediction Grid":
                 with col_b:
                     val_B = st.number_input("Away", min_value=0, max_value=20, value=default_val_B, placeholder="--", key=f"predB_{f['id']}_{selected_id}", label_visibility="collapsed")
                 
-                st.markdown("---")
+                st.markdown("<hr style='margin:8px 0; border-top:1px dashed rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
                 updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
                 
-            if st.form_submit_button("💾 Save All Predictions for Player", use_container_width=True):
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.form_submit_button("💾 Save Matrix Predictions", use_container_width=True):
                 other_preds = [p for p in preds if p["participantId"] != selected_id]
                 db["predictions"] = other_preds + updated_preds
                 save_db(db)
-                st.success(f"Successfully recorded picks for {part_dict[selected_id]}!")
+                st.success(f"Predictions matrix updated successfully for {part_dict[selected_id]}!")
                 st.rerun()
 
 # --- MENU TAB 3: MANAGE GAMES ---
 elif menu == "Manage Games":
-    st.title("⚙️ Admin Match & Results Editor")
+    st.title("⚙️ Tournament Match Controller")
     
-    with st.expander("➕ Add New Match Fixture", expanded=False):
+    with st.expander("➕ Create New Match Fixture Entry", expanded=False):
         with st.form("add_new_fixture_form"):
             col_t1, col_t2 = st.columns(2)
-            teamA = col_t1.selectbox("Home Country", sorted(TEAMS))
-            teamB = col_t2.selectbox("Away Country", sorted(TEAMS))
-            phase = st.text_input("Tournament Phase / Bracket Group", "Group Stage")
+            teamA = col_t1.selectbox("Home Team Designation", sorted(TEAMS))
+            teamB = col_t2.selectbox("Away Team Designation", sorted(TEAMS))
+            phase = st.text_input("Tournament Phase / Bracket Context", "Group Stage")
             
-            st.markdown("**Kick-off Time**")
+            st.markdown("**Kick-off Execution Clock**")
             col_d, col_h, col_m, col_p = st.columns([2, 1, 1, 1])
-            date_val = col_d.date_input("Match Date")
+            date_val = col_d.date_input("Scheduled Date Mapping")
             hr_val = col_h.selectbox("Hour", ["12", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"], index=3)
-            min_val = col_m.selectbox("Min", ["00", "15", "30", "45"])
-            ampm_val = col_p.selectbox("AM/PM", ["AM", "PM"], index=1)
+            min_val = col_m.selectbox("Minute", ["00", "15", "30", "45"])
+            ampm_val = col_p.selectbox("Standard Window", ["AM", "PM"], index=1)
             
-            if st.form_submit_button("Create Official Match"):
+            if st.form_submit_button("Generate Match Configuration", use_container_width=True):
                 if teamA == teamB:
-                    st.error("A country cannot play against itself.")
+                    st.error("Invalid Matching: Selection contains mirroring identical teams.")
                 else:
                     h_int = int(hr_val)
                     if ampm_val == "PM" and h_int != 12: h_int += 12
@@ -271,81 +302,92 @@ elif menu == "Manage Games":
                     }
                     db["fixtures"].append(new_fixture)
                     save_db(db)
-                    st.success(f"Scheduled: {teamA} vs {teamB}")
+                    st.success(f"Match Established: {teamA} vs {teamB}")
                     st.rerun()
 
-    st.subheader("Modify Existing Fixtures and Results")
+    st.subheader("Modify Matrix Fixtures & Official Scores")
     if not db.get("fixtures", []):
-        st.info("No fixtures created yet.")
+        st.info("No games scheduled on database layers yet.")
+    else:
+        col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([2, 3.5, 1, 1, 1.5, 1.5])
+        col_h1.caption("ROUND INFO")
+        col_h2.caption("CONTESTANTS")
+        col_h3.caption("HOME SCORE")
+        col_h4.caption("AWAY SCORE")
+        col_h5.caption("COMPLETION")
+        col_h6.caption("COMMITMENT")
+        st.divider()
         
-    # UI Header Row
-    col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([2, 3.5, 1, 1, 1.5, 1.5])
-    col_h1.caption("MATCH INFO")
-    col_h2.caption("FIXTURE")
-    col_h3.caption("HOME")
-    col_h4.caption("AWAY")
-    col_h5.caption("STATUS")
-    col_h6.caption("ACTION")
-    st.divider()
-    
-    for f in db.get("fixtures", []):
-        col_info, col_match, col_a, col_b, col_status, col_btn = st.columns([2, 3.5, 1, 1, 1.5, 1.5])
-        
-        with col_info:
-            st.markdown(f"**{f['phase']}**<br><span style='font-size:0.85em; color:gray;'>{f['date']}</span>", unsafe_allow_html=True)
-        with col_match:
-            st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}**<br>{get_flag(f['teamB'])} **{f['teamB']}**", unsafe_allow_html=True)
-        with col_a:
-            val_sa = st.number_input("Home Score", min_value=0, max_value=20, value=f["scoreA"] if f.get("scoreA") is not None else None, placeholder="-", key=f"admin_sa_{f['id']}", label_visibility="collapsed")
-        with col_b:
-            val_sb = st.number_input("Away Score", min_value=0, max_value=20, value=f["scoreB"] if f.get("scoreB") is not None else None, placeholder="-", key=f"admin_sb_{f['id']}", label_visibility="collapsed")
-        with col_status:
-            status_val = st.selectbox("State", ["PENDING", "FINISHED"], index=0 if f["status"] == "PENDING" else 1, key=f"admin_st_{f['id']}", label_visibility="collapsed")
-        with col_btn:
-            if st.button("Save", key=f"admin_btn_{f['id']}", use_container_width=True):
-                f["scoreA"] = val_sa
-                f["scoreB"] = val_sb
-                f["status"] = status_val
-                save_db(db)
-                st.success("Updated!")
-                st.rerun()
-                
-        st.markdown("---")
+        for f in db.get("fixtures", []):
+            col_info, col_match, col_a, col_b, col_status, col_btn = st.columns([2, 3.5, 1, 1, 1.5, 1.5])
+            
+            with col_info:
+                st.markdown(f"**{f['phase']}**<br><span style='font-size:0.85em; color:gray;'>{f['date']}</span>", unsafe_allow_html=True)
+            with col_match:
+                st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}**<br>{get_flag(f['teamB'])} **{f['teamB']}**", unsafe_allow_html=True)
+            with col_a:
+                val_sa = st.number_input("Score A", min_value=0, max_value=20, value=f["scoreA"] if f.get("scoreA") is not None else None, placeholder="-", key=f"admin_sa_{f['id']}", label_visibility="collapsed")
+            with col_b:
+                val_sb = st.number_input("Score B", min_value=0, max_value=20, value=f["scoreB"] if f.get("scoreB") is not None else None, placeholder="-", key=f"admin_sb_{f['id']}", label_visibility="collapsed")
+            with col_status:
+                status_val = st.selectbox("State Status", ["PENDING", "FINISHED"], index=0 if f["status"] == "PENDING" else 1, key=f"admin_st_{f['id']}", label_visibility="collapsed")
+            with col_btn:
+                if st.button("Update", key=f"admin_btn_{f['id']}", use_container_width=True):
+                    f["scoreA"] = val_sa
+                    f["scoreB"] = val_sb
+                    f["status"] = status_val
+                    save_db(db)
+                    st.success("Matrix Synchronized")
+                    st.rerun()
+                    
+            st.markdown("<hr style='margin:4px 0; rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+
 # --- MENU TAB 4: PARTICIPANTS ---
 elif menu == "Participants":
-    st.title("👥 Enroll Competitors")
+    st.title("👥 Registry Profile Manager")
     
-    with st.form("enroll_player_form"):
+    with st.form("enroll_player_form", clear_on_submit=True):
         new_player_name = st.text_input("Enter New Player Name:")
-        if st.form_submit_button("Register Participant"):
+        if st.form_submit_button("Register Participant Profile", use_container_width=True):
             if new_player_name.strip() == "":
-                st.error("Name cannot be blank.")
+                st.error("Submission rejected: Identification name string cannot be blank.")
             else:
                 new_id = f"p_{int(datetime.now().timestamp())}"
                 db["participants"].append({"id": new_id, "name": new_player_name.strip()})
                 save_db(db)
-                st.success(f"Enrolled {new_player_name.strip()} successfully!")
+                st.success(f"Profile locked: Enrolled {new_player_name.strip()} successfully!")
                 st.rerun()
                 
-    st.subheader("Current Registered Competitors")
+    st.subheader("Current Registered Roster")
+    st.divider()
     if not db.get("participants", []):
-        st.info("No players enrolled yet.")
-    for p in db.get("participants", []):
-        st.markdown(f"👤 **{p['name']}** (ID: `{p['id']}`)")
+        st.info("Roster empty. No profiles built yet.")
+    else:
+        for p in db.get("participants", []):
+            c_name, c_delete = st.columns([5, 1])
+            with c_name:
+                st.markdown(f"👤 **{p['name']}** &nbsp;&nbsp;|&nbsp;&nbsp; <span style='color:gray; font-size:0.85em;'>ID: `{p['id']}`</span>", unsafe_allow_html=True)
+            with c_delete:
+                if st.button("🗑️ Wipe Profile", key=f"del_{p['id']}", use_container_width=True):
+                    db["participants"] = [x for x in db["participants"] if x["id"] != p["id"]]
+                    db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
+                    save_db(db)
+                    st.warning(f"Purged: Checked profile for {p['name']} removed entirely.")
+                    st.rerun()
+            st.markdown("<hr style='margin:4px 0; border-top:1px dashed rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
 
 # --- MENU TAB 5: SHARE & EXPORT ---
 elif menu == "Share & Export":
-    st.title("📸 Share Predictions & Export Data")
-    st.markdown("Download the unified Master Audit Sheet. This single Excel sheet contains the leaderboard totals and a complete breakdown of exactly how many points each player earned for every match.")
+    st.title("📸 Report Exportation Desk")
+    st.markdown("Extract centralized auditing metrics to compile offline or review comprehensive individual player prediction spreadsheets.")
     
     participants = db.get("participants", [])
     fixtures = db.get("fixtures", [])
     predictions = db.get("predictions", [])
     
     if not participants or not fixtures:
-        st.info("You need to add participants and fixtures before you can generate a shareable grid or report.")
+        st.info("System tracking reports require an active lineup configuration along with standard enrolled competitor metrics.")
     else:
-        # --- PREPARE UNIFIED AUDIT MATRIX DATA ---
         unified_data = []
         
         for p in participants:
@@ -353,24 +395,18 @@ elif menu == "Share & Export":
             exact_count = 0
             outcome_count = 0
             
-            # Start building the row with basic info
             row_data = {"Participant": p["name"]}
             match_breakdowns = {}
-            
-            # Fetch all predictions for this user
             p_preds = [pr for pr in predictions if pr["participantId"] == p["id"]]
             
             for f in fixtures:
-                # Determine if match is finished to show points
                 is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                 
-                # Create the Column Header (showing the real outcome if finished)
                 if is_finished:
-                    match_header = f"{f['teamA']} vs {f['teamB']} [Result: {f['scoreA']}-{f['scoreB']}]"
+                    match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]"
                 else:
                     match_header = f"{f['teamA']} vs {f['teamB']} [Pending]"
                 
-                # Find the specific prediction
                 pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
                 
                 if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
@@ -386,43 +422,41 @@ elif menu == "Share & Export":
                     else:
                         match_breakdowns[match_header] = pred_str
                 else:
-                    # They didn't make a pick or it was left entirely blank
-                    match_breakdowns[match_header] = "No Pick (0 pts)" if is_finished else "No Pick"
+                    match_breakdowns[match_header] = "Unselected (0 pts)" if is_finished else "Unselected"
             
-            # Add the totals to the row
             row_data["Total Points"] = total_score
             row_data["Exact Scores (3pt)"] = exact_count
             row_data["Correct Outcomes (2pt)"] = outcome_count
             
-            # Merge the match breakdowns into the row
             row_data.update(match_breakdowns)
             unified_data.append(row_data)
             
-        # Convert to DataFrame and sort by Top Score
         df_unified = pd.DataFrame(unified_data)
         df_unified = df_unified.sort_values(by=["Total Points", "Exact Scores (3pt)"], ascending=[False, False])
         
-        st.subheader("📋 Master Audit Matrix Preview")
+        st.subheader("📋 Comprehensive Performance Matrix")
         st.dataframe(df_unified, use_container_width=True)
         
-        # --- EXCEL EXPORT (Single Sheet) ---
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_unified.to_excel(writer, sheet_name='Audit Sheet', index=False)
+            df_unified.to_excel(writer, sheet_name='Audit Report Sheet', index=False)
             
-        st.download_button(
-            label="📥 Download Master Audit Sheet (Excel)",
-            data=output.getvalue(),
-            file_name="Tournament_Audit_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
-    st.markdown("---")
-    st.subheader("💾 System Database Backup")
-    json_string = json.dumps(db, indent=4)
-    st.download_button(
-        label="📥 Download System Backup (data.json)",
-        data=json_string,
-        file_name="data_backup.json",
-        mime="application/json"
-    )
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
+            st.download_button(
+                label="📥 Download Master Audit Spreadsheet (.xlsx)",
+                data=output.getvalue(),
+                file_name="Tournament_Core_Audit_Log.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        with col_ex2:
+            json_string = json.dumps(db, indent=4)
+            st.download_button(
+                label="📥 Download Complete Database Backup (.json)",
+                data=json_string,
+                file_name="system_data_backup.json",
+                mime="application/json",
+                use_container_width=True
+            )
