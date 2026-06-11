@@ -36,15 +36,10 @@ FLAGS = {
 }
 
 def get_flag(team): return FLAGS.get(team, "⚽")
-
 def format_date(date_str):
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return dt.strftime("%a. %d %B")
+    try: return datetime.strptime(date_str, "%Y-%m-%d").strftime("%a. %d %B")
     except: return date_str
-
 def format_time(time_str):
-    if not time_str: return "TBD"
     try: return datetime.strptime(time_str[:5], "%H:%M").strftime("%I:%M %p")
     except: return time_str
 
@@ -77,14 +72,31 @@ if view_mode == "🛡️ Admin Console" and not st.session_state.admin_authentic
         st.session_state.admin_authenticated = True
         st.rerun()
 
-menu = st.sidebar.radio("Navigation", ["Leaderboard", "My Forecasts"] + (["Manage Games", "Participants", "Share & Export"] if is_admin else []))
+menu = st.sidebar.radio("Navigation", ["Leaderboard", "My Predictions"] + (["Manage Games", "Participants", "Share & Export"] if is_admin else []))
 
 # --- TAB: LEADERBOARD ---
 if menu == "Leaderboard":
     st.title("🏆 Leaderboard")
+    leader_rows = []
+    for p in db.get("participants", []):
+        total, exact, outcome, completed = 0, 0, 0, 0
+        p_preds = [pr for pr in db.get("predictions", []) if pr["participantId"] == p["id"]]
+        for pred in p_preds:
+            fix = next((f for f in db.get("fixtures", []) if f["id"] == pred["fixtureId"]), None)
+            if fix and fix.get("status") == "FINISHED":
+                completed += 1
+                pts = compute_points(pred["scoreA"], pred["scoreB"], fix["scoreA"], fix["scoreB"])
+                if pts == 4: exact += 1
+                if pts >= 3: outcome += 1
+                total += pts
+        leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won (3)": outcome})
     
+    if leader_rows:
+        df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False)
+        st.dataframe(df, use_container_width=True)
+
     st.subheader("🟢 Finished Matches")
-    with st.expander("Show/Hide Finished Matches"):
+    with st.expander("Show/Hide Completed Matches"):
         for f in [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]:
             st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} **{f['scoreA']}-{f['scoreB']}** {f['teamB']} {get_flag(f['teamB'])}")
 
@@ -94,23 +106,22 @@ if menu == "Leaderboard":
             st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
             st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}")
 
-# --- TAB: MY FORECASTS ---
-elif menu == "My Forecasts":
-    st.title("📝 My Forecasts")
+# --- TAB: MY PREDICTIONS ---
+elif menu == "My Predictions":
+    st.title("📝 My Predictions")
     part_dict = {p["id"]: p["name"] for p in db.get("participants", [])}
     selected_id = st.selectbox("Select Profile:", list(part_dict.keys()), format_func=lambda x: part_dict[x])
     
     preds = {(p["participantId"], p["fixtureId"]): p for p in db.get("predictions", [])}
-    
     for f in db.get("fixtures", []):
         curr = preds.get((selected_id, f["id"]))
         with st.container(border=True):
             st.caption(f"{format_date(f['date'])}")
             st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
             if curr and curr.get('scoreA') is not None:
-                st.write(f"Forecast: {get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}")
+                st.write(f"Prediction: {get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}")
             else:
-                st.info("No forecast logged")
+                st.info("No prediction logged")
 
 # --- OTHER TABS ---
-# (Add previous logic for Manage Games, Participants, Share & Export)
+# (Remaining logic for Manage Games/Participants/Export...)
