@@ -8,16 +8,6 @@ from io import BytesIO
 # Database Path
 DB_FILE = "data.json"
 
-# --- HIDE STREAMLIT BRANDING & BUTTONS ---
-hide_streamlit_style = """
-<style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 # --- CONFIGURATION ---
 TEAMS = [
     "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
@@ -71,10 +61,49 @@ def compute_points(pred_A, pred_B, act_A, act_B):
     if act_outcome == pred_outcome: return 4 if pA == aA and pB == aB else 3
     return 0
 
-# --- START UP ---
+# --- START UP & STATE SETUP ---
 st.set_page_config(page_title="WC2026 Dashboard", layout="wide", initial_sidebar_state="collapsed")
-db = load_db()
+
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
+if "dark_mode" not in st.session_state: st.session_state.dark_mode = False
+
+# --- HIDE STREAMLIT BRANDING & BUTTONS ---
+hide_streamlit_style = """
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    footer.stFooter {display: none !important;}
+    header {visibility: hidden;}
+    [data-testid="stDecoration"] {display: none;}
+    .stDeployButton {display: none;}
+    .viewerBadge_container__r2Xti {display: none;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# --- INJECT DARK MODE THEME IF TOGGLED ---
+if st.session_state.dark_mode:
+    dark_mode_style = """
+    <style>
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #0e1117 !important;
+            color: #c9d1d9 !important;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #161b22 !important;
+        }
+        h1, h2, h3, h4, h5, h6, p, label, .stMarkdown, [data-testid="stWidgetLabel"] p {
+            color: #f0f6fc !important;
+        }
+        div[data-testid="stForm"], div[data-border="true"] {
+            border-color: #30363d !important;
+            background-color: #161b22 !important;
+        }
+    </style>
+    """
+    st.markdown(dark_mode_style, unsafe_allow_html=True)
+
+db = load_db()
 
 # --- NAVIGATION ---
 view_mode = st.sidebar.selectbox("Access Level", ["👥 Public View", "🛡️ Admin Console"])
@@ -94,6 +123,19 @@ if st.session_state.admin_authenticated:
     if st.sidebar.button("🚪 Close Session"):
         st.session_state.admin_authenticated = False
         st.rerun()
+
+st.sidebar.divider()
+
+# Core Fix: Use Streamlit key parameter assignment directly to clear state lifecycle sync lag
+st.sidebar.checkbox("🌙 Dark Mode", key="dark_mode")
+
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    if st.button("🖨️ Print", use_container_width=True):
+        # Core Fix: Injected via clean Sandbox Execution Window Target instead of a markdown script tag block
+        st.components.v1.html("<script>window.parent.print();</script>", height=0)
+
+st.sidebar.divider()
 
 options = ["Leaderboard", "My Predictions"]
 if is_admin:
@@ -141,7 +183,7 @@ if menu == "Leaderboard":
         for f in pending_matches:
             with st.container(border=True):
                 st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
-                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
+                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}")
     else:
         st.caption("No upcoming matches scheduled.")
 
@@ -189,11 +231,9 @@ elif menu == "My Predictions":
                     st.success(f"Updated successfully for {part_dict[selected_id]}!")
                     st.rerun()
 
-            # --- NEW: Clear Scores Button ---
             st.markdown("---")
             st.markdown("#### Danger Zone")
             if st.button(f"🗑️ Clear All Predictions for {part_dict[selected_id]}", type="primary", use_container_width=True):
-                # Filter out the predictions for the currently selected user
                 db["predictions"] = [p for p in db["predictions"] if p["participantId"] != selected_id]
                 save_db(db)
                 st.warning(f"All logged predictions for {part_dict[selected_id]} have been wiped.")
@@ -204,7 +244,7 @@ elif menu == "My Predictions":
                 curr = saved_preds_dict.get((selected_id, f["id"]))
                 with st.container(border=True):
                     st.caption(f"{format_date(f['date'])}")
-                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
+                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
                     if curr and curr.get('scoreA') is not None and curr.get('scoreB') is not None:
                         st.success(f"Prediction: **{get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}**")
                     else:
@@ -260,7 +300,7 @@ elif menu == "Manage Games":
         for f in db.get("fixtures", []):
             with st.container(border=True):
                 st.caption(f"{f['phase']} | {format_date(f['date'])}")
-                st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
+                st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}**")
                 
                 c_sa, c_sb = st.columns(2)
                 with c_sa: 
@@ -341,7 +381,8 @@ elif menu == "Manage Games":
                                     st.rerun()
                         with col_cancel:
                             if st.form_submit_button("❌ Cancel", use_container_width=True):
-                                st.session_state[f"edit_mode_{f['id']}"] = False
+                                map_id = f"edit_mode_{f['id']}"
+                                st.session_state[map_id] = False
                                 st.rerun()
 
 # --- TAB: PARTICIPANTS ---
