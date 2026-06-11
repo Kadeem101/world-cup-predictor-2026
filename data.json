@@ -125,20 +125,26 @@
         {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780732281",
-            "scoreA": null,
-            "scoreB": null
+            "scoreA": 2,
+            "scoreB": 1
         },
         {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780733456",
-            "scoreA": null,
-            "scoreB": null
+            "scoreA": 2,
+            "scoreB": 1
         },
         {
             "participantId": "p_1780734460",
             "fixtureId": "f_1780734653",
-            "scoreA": null,
-            "scoreB": null
+            "scoreA": 2,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780734460",
+            "fixtureId": "f_1781189826",
+            "scoreA": 2,
+            "scoreB": 1
         }
     ],
     "teams": [
