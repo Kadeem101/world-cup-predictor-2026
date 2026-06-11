@@ -59,16 +59,24 @@ def save_db(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# --- POINT COMPUTATION ---
+# --- NEW SCORING COMPUTATION ---
 def compute_points(pred_A, pred_B, act_A, act_B):
     if act_A is None or act_B is None or pred_A is None or pred_B is None:
         return 0
-    if int(pred_A) == int(act_A) and int(pred_B) == int(act_B):
-        return 3
-    act_outcome = 1 if act_A > act_B else (2 if act_A < act_B else 0)
-    pred_outcome = 1 if pred_A > pred_B else (2 if pred_A < pred_B else 0)
+    
+    pA, pB = int(pred_A), int(pred_B)
+    aA, aB = int(act_A), int(act_B)
+    
+    # 1 for Team A win, 2 for Team B win, 0 for draw
+    act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
+    pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
+    
     if act_outcome == pred_outcome:
-        return 2
+        # 3 points for correct outcome, plus 1 extra point for exact score (Total: 4)
+        if pA == aA and pB == aB:
+            return 4
+        return 3 # 3 points for correct outcome only
+    
     return 0
 
 # --- START UP ---
@@ -134,27 +142,28 @@ if menu == "Leaderboard":
                 if pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                     completed_games += 1
                     pts = compute_points(pred["scoreA"], pred["scoreB"], fix["scoreA"], fix["scoreB"])
-                    if pts == 3:
+                    if pts == 4:
                         exact_count += 1
-                        total_score += 3
-                    elif pts == 2:
+                        total_score += 4
+                    elif pts == 3:
                         outcome_count += 1
-                        total_score += 2
+                        total_score += 3
                     else:
                         wrong_count += 1
                     
         leader_rows.append({
             "Participant": p["name"],
             "Total Points": total_score,
-            "Exact Scores (3pt)": exact_count,
-            "Correct Outcomes (2pt)": outcome_count,
+            "Exact Scores (4pt)": exact_count,
+            "Correct Outcomes (3pt)": outcome_count,
             "Incorrect (0pt)": wrong_count,
             "Matches Reviewed": completed_games
         })
         
     if leader_rows:
         df_leader = pd.DataFrame(leader_rows)
-        df_leader = df_leader.sort_values(by=["Total Points", "Exact Scores (3pt)", "Matches Reviewed"], ascending=[False, False, True]).reset_index(drop=True)
+        # Sort primarily by total points, then by exact scores tiebreaker
+        df_leader = df_leader.sort_values(by=["Total Points", "Exact Scores (4pt)", "Matches Reviewed"], ascending=[False, False, True]).reset_index(drop=True)
         df_leader.index = df_leader.index + 1
         df_leader.index.name = "Rank"
         
@@ -440,8 +449,8 @@ elif menu == "Share & Export":
                     
                     if is_finished:
                         pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
-                        if pts == 3: exact_count += 1
-                        if pts == 2: outcome_count += 1
+                        if pts == 4: exact_count += 1
+                        if pts == 3: outcome_count += 1
                         total_score += pts
                         
                         match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
@@ -451,14 +460,14 @@ elif menu == "Share & Export":
                     match_breakdowns[match_header] = "Unselected (0 pts)" if is_finished else "Unselected"
             
             row_data["Total Points"] = total_score
-            row_data["Exact Scores (3pt)"] = exact_count
-            row_data["Correct Outcomes (2pt)"] = outcome_count
+            row_data["Exact Scores (4pt)"] = exact_count
+            row_data["Correct Outcomes (3pt)"] = outcome_count
             
             row_data.update(match_breakdowns)
             unified_data.append(row_data)
             
         df_unified = pd.DataFrame(unified_data)
-        df_unified = df_unified.sort_values(by=["Total Points", "Exact Scores (3pt)"], ascending=[False, False])
+        df_unified = df_unified.sort_values(by=["Total Points", "Exact Scores (4pt)"], ascending=[False, False])
         
         st.subheader("📋 Comprehensive Performance Matrix")
         st.dataframe(df_unified, use_container_width=True)

@@ -17,16 +17,12 @@
             "name": "Kavita"
         },
         {
-            "id": "p_1780732073",
-            "name": "Richard Lee-Poy"
-        },
-        {
-            "id": "p_1780732078",
-            "name": "Gillian"
-        },
-        {
             "id": "p_1780734460",
             "name": "Kadeem"
+        },
+        {
+            "id": "p_1781151718",
+            "name": "Alan"
         }
     ],
     "fixtures": [
@@ -97,30 +93,6 @@
         },
         {
             "participantId": "p_1780732068",
-            "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732078",
-            "fixtureId": "f_1780732281",
-            "scoreA": 2,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732078",
-            "fixtureId": "f_1780733456",
-            "scoreA": 0,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732073",
-            "fixtureId": "f_1780732281",
-            "scoreA": 6,
-            "scoreB": 0
-        },
-        {
-            "participantId": "p_1780732073",
             "fixtureId": "f_1780733456",
             "scoreA": 0,
             "scoreB": 0
