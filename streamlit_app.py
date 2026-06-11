@@ -12,7 +12,7 @@ DB_FILE = "data.json"
 TEAMS = [
     "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
     "Brazil", "Canada", "Cape Verde", "Colombia", "Croatia", "Curaçao", 
-    "Czech Republic", "DR Congo", "Ecuador", "Egypt", "England", "France", 
+    "Czechia", "DR Congo", "Ecuador", "Egypt", "England", "France", 
     "Germany", "Ghana", "Haiti", "Iran", "Iraq", "Ivory Coast", "Japan", 
     "Jordan", "Mexico", "Morocco", "Netherlands", "New Zealand", "Norway", 
     "Panama", "Paraguay", "Portugal", "Qatar", "Saudi Arabia", "Scotland", 
@@ -23,7 +23,7 @@ TEAMS = [
 FLAGS = {
     "Argentina": "🇦🇷", "Australia": "🇦🇺", "Austria": "🇦🇹", "Belgium": "🇧🇪",
     "Bosnia and Herzegovina": "🇧🇦", "Brazil": "🇧🇷", "Canada": "🇨🇦", "Cape Verde": "🇨🇻",
-    "Colombia": "🇨🇴", "Croatia": "🇭🇷", "Curaçao": "🇨🇼", "Czech Republic": "🇨🇿",
+    "Colombia": "🇨🇴", "Croatia": "🇭🇷", "Curaçao": "🇨🇼", "Czechia": "🇨🇿",
     "DR Congo": "🇨🇩", "Ecuador": "🇪🇨", "Egypt": "🇪🇬", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
     "France": "🇫🇷", "Germany": "🇩🇪", "Ghana": "🇬🇭", "Haiti": "🇭🇹",
     "Iran": "🇮🇷", "Iraq": "🇮🇶", "Ivory Coast": "🇨🇮", "Japan": "🇯🇵",
