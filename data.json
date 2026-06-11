@@ -5,10 +5,6 @@
             "name": "Kevon"
         },
         {
-            "id": "p_1780732052",
-            "name": "Hislop"
-        },
-        {
             "id": "p_1780732058",
             "name": "Anthony"
         },
@@ -75,24 +71,6 @@
         },
         {
             "participantId": "p_1780732046",
-            "fixtureId": "f_1780734653",
-            "scoreA": null,
-            "scoreB": null
-        },
-        {
-            "participantId": "p_1780732052",
-            "fixtureId": "f_1780732281",
-            "scoreA": null,
-            "scoreB": null
-        },
-        {
-            "participantId": "p_1780732052",
-            "fixtureId": "f_1780733456",
-            "scoreA": null,
-            "scoreB": null
-        },
-        {
-            "participantId": "p_1780732052",
             "fixtureId": "f_1780734653",
             "scoreA": null,
             "scoreB": null
