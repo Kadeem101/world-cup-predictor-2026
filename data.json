@@ -33,9 +33,9 @@
             "date": "2026-06-11",
             "time": "15:00",
             "phase": "Group Stage (A)",
-            "scoreA": 4,
-            "scoreB": 2,
-            "status": "FINISHED"
+            "scoreA": 0,
+            "scoreB": 0,
+            "status": "PENDING"
         },
         {
             "id": "f_1780733456",
