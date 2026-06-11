@@ -99,7 +99,9 @@ if view_mode == "🛡️ Admin Console" and not st.session_state.admin_authentic
             st.sidebar.error("Invalid Admin Key")
 
 # Determine Dynamic Menu Navigation Options Based on Visibility Rights
-if view_mode == "🛡️ Admin Console" and st.session_state.admin_authenticated:
+is_admin = view_mode == "🛡️ Admin Console" and st.session_state.admin_authenticated
+
+if is_admin:
     menu = st.sidebar.radio("Control Panel", ["Leaderboard", "Prediction Grid", "Manage Games", "Participants", "Share & Export"])
 else:
     menu = st.sidebar.radio("Dashboard Navigation", ["Leaderboard", "Prediction Grid"])
@@ -222,45 +224,69 @@ elif menu == "Prediction Grid":
         preds = db.get("predictions", [])
         saved_preds_dict = {(p["participantId"], p["fixtureId"]): p for p in preds}
         
-        updated_preds = []
-        
-        with st.form("prediction_submission_form", clear_on_submit=False):
-            st.markdown(f"#### Logged Predictions Matrix for: **{part_dict[selected_id]}**")
+        if is_admin:
+            # ADMIN VIEW: Editable Grid
+            updated_preds = []
+            with st.form("prediction_submission_form", clear_on_submit=False):
+                st.markdown(f"#### Logged Predictions Matrix for: **{part_dict[selected_id]}** (Admin Mode)")
+                
+                col_h1, col_h2, col_h3, col_h4 = st.columns([2.5, 3.5, 1, 1])
+                col_h1.caption("ROUND CONTEXT")
+                col_h2.caption("UPCOMING MATCHUP")
+                col_h3.caption("HOME PREDICTION")
+                col_h4.caption("AWAY PREDICTION")
+                st.divider()
+
+                for f in fixtures:
+                    curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
+                    default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else None
+                    default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else None
+                    
+                    col_info, col_match, col_a, col_b = st.columns([2.5, 3.5, 1, 1])
+                    with col_info:
+                        st.markdown(f"**{f['phase']}**<br><span style='font-size:0.85em; color:gray;'>{f['date']} @ {format_time(f['time'])}</span>", unsafe_allow_html=True)
+                    with col_match:
+                        st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']}** vs **{f['teamB']} {get_flag(f['teamB'])}**")
+                    with col_a:
+                        val_A = st.number_input("Home", min_value=0, max_value=20, value=default_val_A, placeholder="--", key=f"predA_{f['id']}_{selected_id}", label_visibility="collapsed")
+                    with col_b:
+                        val_B = st.number_input("Away", min_value=0, max_value=20, value=default_val_B, placeholder="--", key=f"predB_{f['id']}_{selected_id}", label_visibility="collapsed")
+                    
+                    st.markdown("<hr style='margin:8px 0; border-top:1px dashed rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
+                    updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
+                    
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.form_submit_button("💾 Save Matrix Predictions", use_container_width=True):
+                    other_preds = [p for p in preds if p["participantId"] != selected_id]
+                    db["predictions"] = other_preds + updated_preds
+                    save_db(db)
+                    st.success(f"Predictions matrix updated successfully for {part_dict[selected_id]}!")
+                    st.rerun()
+        else:
+            # PUBLIC VIEW: Read-Only Locked Mode
+            st.markdown(f"#### Locked Score Card for: **{part_dict[selected_id]}**")
             
-            col_h1, col_h2, col_h3, col_h4 = st.columns([2.5, 3.5, 1, 1])
+            col_h1, col_h2, col_h3 = st.columns([3, 4, 2])
             col_h1.caption("ROUND CONTEXT")
-            col_h2.caption("UPCOMING MATCHUP")
-            col_h3.caption("HOME PREDICTION")
-            col_h4.caption("AWAY PREDICTION")
+            col_h2.caption("MATCHUP")
+            col_h3.caption("SUBMITTED FORECAST")
             st.divider()
 
             for f in fixtures:
                 curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
                 
-                default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else None
-                default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else None
-                
-                col_info, col_match, col_a, col_b = st.columns([2.5, 3.5, 1, 1])
-                
+                col_info, col_match, col_score = st.columns([3, 4, 2])
                 with col_info:
-                    st.markdown(f"**{f['phase']}**<br><span style='font-size:0.85em; color:gray;'>{f['date']} @ {format_time(f['time'])}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**{f['phase']}**<br><span style='font-size:0.85em; color:gray;'>{f['date']}</span>", unsafe_allow_html=True)
                 with col_match:
-                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']}** vs **{f['teamB']} {get_flag(f['teamB'])}**")
-                with col_a:
-                    val_A = st.number_input("Home", min_value=0, max_value=20, value=default_val_A, placeholder="--", key=f"predA_{f['id']}_{selected_id}", label_visibility="collapsed")
-                with col_b:
-                    val_B = st.number_input("Away", min_value=0, max_value=20, value=default_val_B, placeholder="--", key=f"predB_{f['id']}_{selected_id}", label_visibility="collapsed")
+                    st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
+                with col_score:
+                    if curr_pred is not None and curr_pred.get("scoreA") is not None and curr_pred.get("scoreB") is not None:
+                        st.markdown(f"🎯 **{curr_pred['scoreA']} — {curr_pred['scoreB']}**")
+                    else:
+                        st.markdown("<span style='color:gray;'>No forecast logged</span>", unsafe_allow_html=True)
                 
-                st.markdown("<hr style='margin:8px 0; border-top:1px dashed rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
-                updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
-                
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.form_submit_button("💾 Save Matrix Predictions", use_container_width=True):
-                other_preds = [p for p in preds if p["participantId"] != selected_id]
-                db["predictions"] = other_preds + updated_preds
-                save_db(db)
-                st.success(f"Predictions matrix updated successfully for {part_dict[selected_id]}!")
-                st.rerun()
+                st.markdown("<hr style='margin:6px 0; border-top:1px dashed rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
 
 # --- MENU TAB 3: MANAGE GAMES ---
 elif menu == "Manage Games":
