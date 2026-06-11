@@ -107,7 +107,7 @@ if menu == "Leaderboard":
                 if pts == 4: exact += 1
                 if pts >= 3: outcome += 1
                 total += pts
-        leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won (3)": outcome})
+        leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won / Draw (3)": outcome})
     
     if leader_rows:
         df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False).reset_index(drop=True)
