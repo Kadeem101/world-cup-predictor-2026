@@ -63,20 +63,29 @@ st.set_page_config(page_title="WC2026", layout="wide", initial_sidebar_state="co
 db = load_db()
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
-# Sidebar
+# --- NAVIGATION ---
 view_mode = st.sidebar.selectbox("Access Level", ["👥 Public View", "🛡️ Admin Console"])
-is_admin = view_mode == "🛡️ Admin Console" and st.session_state.admin_authenticated
 
 if view_mode == "🛡️ Admin Console" and not st.session_state.admin_authenticated:
-    if st.sidebar.text_input("Admin Key", type="password") == "admin123":
-        st.session_state.admin_authenticated = True
-        st.rerun()
+    key = st.sidebar.text_input("Admin Key", type="password")
+    if st.sidebar.button("Verify"):
+        if key == "admin123":
+            st.session_state.admin_authenticated = True
+            st.rerun()
+        else:
+            st.sidebar.error("Invalid Key")
 
-menu = st.sidebar.radio("Navigation", ["Leaderboard", "My Predictions"] + (["Manage Games", "Participants", "Share & Export"] if is_admin else []))
+# Define menu based on state
+options = ["Leaderboard", "My Predictions"]
+if view_mode == "🛡️ Admin Console" and st.session_state.admin_authenticated:
+    options += ["Manage Games", "Participants", "Share & Export"]
 
-# --- TAB: LEADERBOARD ---
+menu = st.sidebar.radio("Navigation", options)
+
+# --- TABS ---
 if menu == "Leaderboard":
     st.title("🏆 Leaderboard")
+    # ... (Restored Leaderboard Logic)
     leader_rows = []
     for p in db.get("participants", []):
         total, exact, outcome, completed = 0, 0, 0, 0
@@ -92,8 +101,7 @@ if menu == "Leaderboard":
         leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won (3)": outcome})
     
     if leader_rows:
-        df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False), use_container_width=True)
 
     st.subheader("🟢 Finished Matches")
     with st.expander("Show/Hide Completed Matches"):
@@ -106,12 +114,11 @@ if menu == "Leaderboard":
             st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
             st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {get_flag(f['teamB'])} {f['teamB']}")
 
-# --- TAB: MY PREDICTIONS ---
 elif menu == "My Predictions":
+    # ... (Restored My Predictions Logic)
     st.title("📝 My Predictions")
     part_dict = {p["id"]: p["name"] for p in db.get("participants", [])}
     selected_id = st.selectbox("Select Profile:", list(part_dict.keys()), format_func=lambda x: part_dict[x])
-    
     preds = {(p["participantId"], p["fixtureId"]): p for p in db.get("predictions", [])}
     for f in db.get("fixtures", []):
         curr = preds.get((selected_id, f["id"]))
@@ -123,5 +130,12 @@ elif menu == "My Predictions":
             else:
                 st.info("No prediction logged")
 
-# --- OTHER TABS ---
-# (Remaining logic for Manage Games/Participants/Export...)
+elif menu == "Manage Games":
+    st.title("⚙️ Manage Games")
+    # ... (Your previous Match Controller logic here)
+elif menu == "Participants":
+    st.title("👥 Participants")
+    # ... (Your previous Participant logic here)
+elif menu == "Share & Export":
+    st.title("📤 Share & Export")
+    # ... (Your previous Export logic here)
