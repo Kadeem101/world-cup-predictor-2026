@@ -1,0 +1,12 @@
+[client]
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[ui]
+hideTopBar = false
+
+[logger]
+level = "info"
+
+[browser]
+gatherUsageStats = false

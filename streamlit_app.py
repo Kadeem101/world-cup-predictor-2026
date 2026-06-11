@@ -8,6 +8,16 @@ from io import BytesIO
 # Database Path
 DB_FILE = "data.json"
 
+# --- HIDE STREAMLIT BRANDING & BUTTONS ---
+hide_streamlit_style = """
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # --- CONFIGURATION ---
 TEAMS = [
     "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
