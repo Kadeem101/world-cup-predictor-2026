@@ -54,6 +54,17 @@
             "scoreA": null,
             "scoreB": null,
             "status": "PENDING"
+        },
+        {
+            "id": "f_1781189826",
+            "teamA": "USA",
+            "teamB": "Paraguay",
+            "date": "2026-06-12",
+            "time": "21:00",
+            "phase": "Group Stage",
+            "scoreA": null,
+            "scoreB": null,
+            "status": "PENDING"
         }
     ],
     "predictions": [
