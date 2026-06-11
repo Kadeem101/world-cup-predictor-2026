@@ -1,0 +1,214 @@
+{
+    "participants": [
+        {
+            "id": "p_1780732046",
+            "name": "Kevon"
+        },
+        {
+            "id": "p_1780732052",
+            "name": "Hislop"
+        },
+        {
+            "id": "p_1780732058",
+            "name": "Anthony"
+        },
+        {
+            "id": "p_1780732068",
+            "name": "Kavita"
+        },
+        {
+            "id": "p_1780732073",
+            "name": "Richard Lee-Poy"
+        },
+        {
+            "id": "p_1780732078",
+            "name": "Gillian"
+        },
+        {
+            "id": "p_1780734460",
+            "name": "Kadeem"
+        }
+    ],
+    "fixtures": [
+        {
+            "id": "f_1780732281",
+            "teamA": "Mexico",
+            "teamB": "South Africa",
+            "date": "2026-06-11",
+            "time": "15:00",
+            "phase": "Group Stage (A)",
+            "scoreA": 4,
+            "scoreB": 2,
+            "status": "FINISHED"
+        },
+        {
+            "id": "f_1780733456",
+            "teamA": "South Korea",
+            "teamB": "Czechia",
+            "date": "2026-06-11",
+            "time": "22:00",
+            "phase": "Group Stage (A)",
+            "scoreA": null,
+            "scoreB": null,
+            "status": "PENDING"
+        },
+        {
+            "id": "f_1780734653",
+            "teamA": "Canada",
+            "teamB": "Bosnia and Herzegovina",
+            "date": "2026-06-12",
+            "time": "15:00",
+            "phase": "Group Stage (B)",
+            "scoreA": null,
+            "scoreB": null,
+            "status": "PENDING"
+        }
+    ],
+    "predictions": [
+        {
+            "participantId": "p_1780732052",
+            "fixtureId": "f_1780732281",
+            "scoreA": 2,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732052",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732058",
+            "fixtureId": "f_1780732281",
+            "scoreA": 3,
+            "scoreB": 2
+        },
+        {
+            "participantId": "p_1780732058",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732068",
+            "fixtureId": "f_1780732281",
+            "scoreA": 1,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732068",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732078",
+            "fixtureId": "f_1780732281",
+            "scoreA": 2,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732078",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732073",
+            "fixtureId": "f_1780732281",
+            "scoreA": 6,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732073",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732046",
+            "fixtureId": "f_1780732281",
+            "scoreA": 4,
+            "scoreB": 2
+        },
+        {
+            "participantId": "p_1780732046",
+            "fixtureId": "f_1780733456",
+            "scoreA": 0,
+            "scoreB": 0
+        },
+        {
+            "participantId": "p_1780732046",
+            "fixtureId": "f_1780734653",
+            "scoreA": null,
+            "scoreB": null
+        },
+        {
+            "participantId": "p_1780734460",
+            "fixtureId": "f_1780732281",
+            "scoreA": 3,
+            "scoreB": 3
+        },
+        {
+            "participantId": "p_1780734460",
+            "fixtureId": "f_1780733456",
+            "scoreA": 5,
+            "scoreB": 9
+        },
+        {
+            "participantId": "p_1780734460",
+            "fixtureId": "f_1780734653",
+            "scoreA": 0,
+            "scoreB": 0
+        }
+    ],
+    "teams": [
+        "Argentina",
+        "Australia",
+        "Austria",
+        "Belgium",
+        "Bosnia and Herzegovina",
+        "Brazil",
+        "Canada",
+        "Cape Verde",
+        "Colombia",
+        "Croatia",
+        "Cura\u00c3\u00a7ao",
+        "Czechia",
+        "DR Congo",
+        "Ecuador",
+        "Egypt",
+        "England",
+        "France",
+        "Germany",
+        "Ghana",
+        "Haiti",
+        "Iran",
+        "Iraq",
+        "Ivory Coast",
+        "Japan",
+        "Jordan",
+        "Mexico",
+        "Morocco",
+        "Netherlands",
+        "New Zealand",
+        "Norway",
+        "Panama",
+        "Paraguay",
+        "Portugal",
+        "Qatar",
+        "Saudi Arabia",
+        "Scotland",
+        "Senegal",
+        "South Africa",
+        "South Korea",
+        "Spain",
+        "Sweden",
+        "Switzerland",
+        "Tunisia",
+        "Turkey",
+        "USA",
+        "Uruguay",
+        "Uzbekistan"
+    ]
+}
