@@ -128,47 +128,139 @@ menu = st.sidebar.radio("Menu", options)
 
 # --- TAB: LEADERBOARD ---
 if menu == "Leaderboard":
-    st.title("🏆 Leaderboard")
+    st.title("🏆 Tournament Central")
     
-    leader_rows = []
-    for p in db.get("participants", []):
-        total, exact, outcome, completed = 0, 0, 0, 0
-        p_preds = [pr for pr in db.get("predictions", []) if pr["participantId"] == p["id"]]
-        for pred in p_preds:
-            fix = next((f for f in db.get("fixtures", []) if f["id"] == pred["fixtureId"]), None)
-            if fix and fix.get("status") == "FINISHED":
-                completed += 1
-                pts = compute_points(pred.get("scoreA"), pred.get("scoreB"), fix.get("scoreA"), fix.get("scoreB"))
-                if pts == 4: exact += 1
-                if pts >= 3: outcome += 1
-                total += pts
-        leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won / Draw (3)": outcome})
+    # 1. Use Tabs to separate simple standings from the full matrix view
+    tab_standings, tab_matrix = st.tabs(["📊 Standings & Fixtures", "👁️ Extended View"])
     
-    if leader_rows:
-        df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False).reset_index(drop=True)
-        df.index += 1
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("No competitors registered on the leaderboard yet.")
+    with tab_standings:
+        leader_rows = []
+        for p in db.get("participants", []):
+            total, exact, outcome, completed = 0, 0, 0, 0
+            p_preds = [pr for pr in db.get("predictions", []) if pr["participantId"] == p["id"]]
+            for pred in p_preds:
+                fix = next((f for f in db.get("fixtures", []) if f["id"] == pred["fixtureId"]), None)
+                if fix and fix.get("status") == "FINISHED":
+                    completed += 1
+                    pts = compute_points(pred.get("scoreA"), pred.get("scoreB"), fix.get("scoreA"), fix.get("scoreB"))
+                    if pts == 4: exact += 1
+                    if pts >= 3: outcome += 1
+                    total += pts
+            leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won / Draw (3)": outcome})
+        
+        if leader_rows:
+            df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False).reset_index(drop=True)
+            df.index += 1
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No competitors registered on the leaderboard yet.")
 
-    st.subheader("🟢 Finished Matches")
-    finished_matches = [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]
-    if finished_matches:
-        with st.expander("Show/Hide Completed Matches"):
-            for f in finished_matches:
-                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} **{f['scoreA']}-{f['scoreB']}** {f['teamB']} {get_flag(f['teamB'])}")
-    else:
-        st.caption("No matches have concluded yet.")
+        st.subheader("🟢 Finished Matches")
+        finished_matches = [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]
+        if finished_matches:
+            with st.expander("Show/Hide Completed Matches"):
+                for f in finished_matches:
+                    st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} **{f['scoreA']}-{f['scoreB']}** {f['teamB']} {get_flag(f['teamB'])}")
+        else:
+            st.caption("No matches have concluded yet.")
 
-    st.subheader("⏳ Upcoming Matches")
-    pending_matches = [f for f in db.get("fixtures", []) if f["status"] == "PENDING"]
-    if pending_matches:
-        for f in pending_matches:
-            with st.container(border=True):
-                st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
-                st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
-    else:
-        st.caption("No upcoming matches scheduled.")
+        st.subheader("⏳ Upcoming Matches")
+        pending_matches = [f for f in db.get("fixtures", []) if f["status"] == "PENDING"]
+        if pending_matches:
+            for f in pending_matches:
+                with st.container(border=True):
+                    st.caption(f"{format_date(f['date'])} | {format_time(f['time'])}")
+                    st.markdown(f"{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
+        else:
+            st.caption("No upcoming matches scheduled.")
+
+    with tab_matrix:
+        participants = db.get("participants", [])
+        fixtures = db.get("fixtures", [])
+        predictions = db.get("predictions", [])
+        
+        if not participants or not fixtures:
+            st.info("The performance matrix will populate once matches and participants are configured.")
+        else:
+            # 2. Extract unified data logic (reused seamlessly from your Export tab)
+            unified_data = []
+            match_headers_list = []
+            
+            # Map clean names for headers first
+            for f in fixtures:
+                is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
+                match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]" if is_finished else f"{f['teamA']} vs {f['teamB']} [Pending]"
+                match_headers_list.append(match_header)
+                
+            for p in participants:
+                total_score = 0
+                exact_count = 0
+                outcome_count = 0
+                
+                row_data = {"Participant": p["name"]}
+                match_breakdowns = {}
+                p_preds = [pr for pr in predictions if pr["participantId"] == p["id"]]
+                
+                for idx, f in enumerate(fixtures):
+                    is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
+                    match_header = match_headers_list[idx]
+                    
+                    pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
+                    if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
+                        pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
+                        if is_finished:
+                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
+                            if pts == 4: exact_count += 1
+                            if pts >= 3: outcome_count += 1
+                            total_score += pts
+                            match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
+                        else:
+                            match_breakdowns[match_header] = pred_str
+                    else:
+                        match_breakdowns[match_header] = "Unselected"
+                
+                row_data["Total Points"] = total_score
+                row_data["Exact (4pt)"] = exact_count
+                row_data["Outcome (3pt)"] = outcome_count
+                row_data.update(match_breakdowns)
+                unified_data.append(row_data)
+                
+            df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
+            
+            # 3. Dynamic layout controls for mobile friendliness
+            st.write("### Extended View")
+            col_filt1, col_filt2 = st.columns([2, 1])
+            with col_filt1:
+                filter_matches = st.multiselect("Filter by Specific Matches (Trims table width on Mobile):", options=match_headers_list, placeholder="Showing all matches...")
+            with col_filt2:
+                search_player = st.text_input("Find Competitor:", placeholder="Type name...")
+            
+            # Filter rows/columns dynamically based on interaction
+            df_filtered = df_unified.copy()
+            if search_player:
+                df_filtered = df_filtered[df_filtered["Participant"].str.contains(search_player, case=False, na=False)]
+            if filter_matches:
+                keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
+                df_filtered = df_filtered[keep_cols]
+                
+            # Render clean matrix table
+            st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+            
+            # 4. Ultimate Mobile Optimization: Vertical Card Drill-Down
+            st.markdown("---")
+            st.write("### 👀 See what other participants predicted")
+            selected_p_name = st.selectbox("Select a participant to view their full prediction list:", options=[p["name"] for p in participants])
+            
+            target_row = next((row for row in unified_data if row["Participant"] == selected_p_name), None)
+            if target_row:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Total Pts", target_row["Total Points"])
+                c2.metric("Exact Scores", target_row["Exact (4pt)"])
+                c3.metric("Correct Outcomes", target_row["Outcome (3pt)"])
+                
+                with st.expander(f"View Full Match Matrix Cards for {selected_p_name}", expanded=True):
+                    for m_header in match_headers_list:
+                        st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
 
 # --- TAB: MY PREDICTIONS ---
 elif menu == "My Predictions":
