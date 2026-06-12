@@ -227,16 +227,9 @@ if menu == "Leaderboard":
                 
             df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
             
-            
-            col_filt1, col_filt2 = st.columns([2, 1])
-            with col_filt1:
-                filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
-            with col_filt2:
-                search_player = st.text_input("Find Participant:", placeholder="Type name...")
+            filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
             
             df_filtered = df_unified.copy()
-            if search_player:
-                df_filtered = df_filtered[df_filtered["Participant"].str.contains(search_player, case=False, na=False)]
             if filter_matches:
                 keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
                 df_filtered = df_filtered[keep_cols]
@@ -276,38 +269,48 @@ elif menu == "Enter/Update Scores":
         saved_preds_dict = {(p["participantId"], p["fixtureId"]): p for p in preds}
         
         updated_preds = []
+        locked_preds = []
+        
         with st.form("prediction_submission_form", clear_on_submit=False):
             st.markdown(f"### Edit/Update Scores for: **{part_dict[selected_id]}**")
-            for f in fixtures:
+            
+            # Separate fixtures into pending and finished
+            pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED"]
+            finished_fixtures = [f for f in fixtures if f.get("status") == "FINISHED"]
+            
+            # 1. Handle Finished Matches (Collapsible)
+            if finished_fixtures:
+                with st.expander("🟢 View Locked Predictions (Finished Matches)"):
+                    for f in finished_fixtures:
+                        curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
+                        score_text = f"{curr_pred['scoreA']}-{curr_pred['scoreB']}" if curr_pred else "No prediction"
+                        st.markdown(f"**{f['teamA']} vs {f['teamB']}**: `{score_text}`")
+                        if curr_pred: 
+                            locked_preds.append(curr_pred)
+            
+            # 2. Handle Pending Matches (Editable)
+            st.markdown("---")
+            st.markdown("### ⏳ Pending Predictions")
+            for f in pending_fixtures:
                 curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
-                default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else None
-                default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else None
-                
                 with st.container(border=True):
                     st.caption(f"{format_date(f['date'])}")
-                    st.markdown(f"#### {get_flag(f['teamA'])} {f['teamA']} 🆚 {f['teamB']} {get_flag(f['teamB'])}")
+                    st.markdown(f"#### {get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
+                    
                     col1, col2 = st.columns(2)
-                    with col1:
-                        val_A = st.number_input(f"{f['teamA']}", min_value=0, max_value=20, value=default_val_A, key=f"predA_{f['id']}_{selected_id}")
-                    with col2:
-                        val_B = st.number_input(f"{f['teamB']}", min_value=0, max_value=20, value=default_val_B, key=f"predB_{f['id']}_{selected_id}")
-                        
-                updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
+                    default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else 0
+                    default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else 0
+                    
+                    val_A = col1.number_input(f"{f['teamA']} Score", min_value=0, max_value=20, value=default_val_A, key=f"predA_{f['id']}_{selected_id}")
+                    val_B = col2.number_input(f"{f['teamB']} Score", min_value=0, max_value=20, value=default_val_B, key=f"predB_{f['id']}_{selected_id}")
+                    updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
                 
-            if st.form_submit_button("💾 Save Predictions", use_container_width=True):
+            if st.form_submit_button("💾 Save Pending Predictions", use_container_width=True):
                 other_preds = [p for p in preds if p["participantId"] != selected_id]
-                db["predictions"] = other_preds + updated_preds
+                db["predictions"] = other_preds + locked_preds + updated_preds
                 save_db(db)
                 st.success(f"Updated successfully for {part_dict[selected_id]}!")
                 st.rerun()
-
-        st.markdown("---")
-        st.markdown("#### Danger Zone")
-        if st.button(f"🗑️ Clear All Predictions for {part_dict[selected_id]}", type="primary", use_container_width=True):
-            db["predictions"] = [p for p in db["predictions"] if p["participantId"] != selected_id]
-            save_db(db)
-            st.warning(f"All logged predictions for {part_dict[selected_id]} have been wiped.")
-            st.rerun()
 
 # --- TAB: MANAGE GAMES ---
 elif menu == "Manage Games":
@@ -352,97 +355,65 @@ elif menu == "Manage Games":
                     st.success("Match Established!")
                     st.rerun()
 
-    st.subheader("Official Scores & Matrix")
-    if not db.get("fixtures", []):
-        st.info("No games scheduled yet.")
+    # Split matches into two lists
+    fixtures = db.get("fixtures", [])
+    pending = [f for f in fixtures if f["status"] == "PENDING"]
+    finished = [f for f in fixtures if f["status"] == "FINISHED"]
+
+    st.subheader("⏳ Pending Matches")
+    if not pending:
+        st.info("No pending games.")
     else:
-        for f in db.get("fixtures", []):
-            with st.container(border=True):
-                st.caption(f"{f['phase']} | {format_date(f['date'])}")
-                st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                
-                c_sa, c_sb = st.columns(2)
-                with c_sa: 
-                    val_sa = st.number_input(f"{f['teamA']} Score", min_value=0, max_value=20, value=f["scoreA"] if f.get("scoreA") is not None else None, key=f"admin_sa_{f['id']}")
-                with c_sb: 
-                    val_sb = st.number_input(f"{f['teamB']} Score", min_value=0, max_value=20, value=f["scoreB"] if f.get("scoreB") is not None else None, key=f"admin_sb_{f['id']}")
-                
-                st.divider()
-                c_st, c_btn = st.columns(2)
-                with c_st:
-                    status_val = st.selectbox("Match Status", ["PENDING", "FINISHED"], index=0 if f["status"] == "PENDING" else 1, key=f"admin_st_{f['id']}")
-                with c_btn:
-                    st.write("")
-                    st.write("")
-                    if st.button("💾 Update", key=f"admin_btn_{f['id']}", use_container_width=True):
-                        f["scoreA"] = val_sa
-                        f["scoreB"] = val_sb
-                        f["status"] = status_val
-                        save_db(db)
-                        st.success("Synchronized!")
-                        st.rerun()
-
-                st.divider()
-                col_edit, col_del = st.columns(2)
-                with col_edit:
-                    if st.button("✏️ Edit Match", key=f"edit_btn_{f['id']}", use_container_width=True):
-                        st.session_state[f"edit_mode_{f['id']}"] = True
-                        st.rerun()
-                with col_del:
-                    if st.button("🗑️ Delete Match", key=f"delete_btn_{f['id']}", use_container_width=True):
-                        db["fixtures"] = [x for x in db["fixtures"] if x["id"] != f["id"]]
-                        db["predictions"] = [x for x in db["predictions"] if x["fixtureId"] != f["id"]]
-                        save_db(db)
-                        st.success("Match deleted!")
-                        st.rerun()
-
-                if st.session_state.get(f"edit_mode_{f['id']}", False):
-                    st.subheader("Edit Match Details")
+        for f in pending:
+            # Inline Edit Form (Placed before the container to handle re-rendering)
+            if st.session_state.get(f"edit_mode_{f['id']}", False):
+                with st.container(border=True):
+                    st.write(f"### Editing: {f['teamA']} vs {f['teamB']}")
                     with st.form(f"edit_fixture_form_{f['id']}"):
-                        teamA_edit = st.selectbox("Home Team", sorted(TEAMS), index=sorted(TEAMS).index(f["teamA"]), key=f"edit_teamA_{f['id']}")
-                        teamB_edit = st.selectbox("Away Team", sorted(TEAMS), index=sorted(TEAMS).index(f["teamB"]), key=f"edit_teamB_{f['id']}")
-                        phase_edit = st.text_input("Tournament Phase", f["phase"], key=f"edit_phase_{f['id']}")
-
-                        st.markdown("**Kick-off Time**")
-                        date_edit = st.date_input("Scheduled Date", value=datetime.strptime(f["date"], "%Y-%m-%d").date(), key=f"edit_date_{f['id']}")
-
-                        time_parts = f["time"].split(":")
-                        hr_int = int(time_parts[0])
-                        min_int = int(time_parts[1])
-                        ampm_val_edit = "AM" if hr_int < 12 else "PM"
-                        if hr_int > 12: hr_int -= 12
-                        elif hr_int == 0: hr_int = 12
-
-                        col_h_e, col_m_e, col_p_e = st.columns([1, 1, 1])
-                        hr_val_edit = col_h_e.selectbox("Hour", ["12", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"], index=int(hr_int)-1, key=f"edit_hr_{f['id']}")
-                        min_val_edit = col_m_e.selectbox("Minute", ["00", "15", "30", "45"], index=["00", "15", "30", "45"].index(f"{min_int:02d}"), key=f"edit_min_{f['id']}")
-                        ampm_val_edit = col_p_e.selectbox("AM/PM", ["AM", "PM"], index=0 if ampm_val_edit == "AM" else 1, key=f"edit_ampm_{f['id']}")
-
+                        teamA_edit = st.selectbox("Home Team", sorted(TEAMS), index=sorted(TEAMS).index(f["teamA"]))
+                        teamB_edit = st.selectbox("Away Team", sorted(TEAMS), index=sorted(TEAMS).index(f["teamB"]))
+                        phase_edit = st.text_input("Tournament Phase", f["phase"])
+                        date_edit = st.date_input("Scheduled Date", value=datetime.strptime(f["date"], "%Y-%m-%d").date())
+                        
                         col_save, col_cancel = st.columns(2)
-                        with col_save:
-                            if st.form_submit_button("✅ Save Changes", use_container_width=True):
-                                if teamA_edit == teamB_edit:
-                                    st.error("Invalid Matching: Teams must be different.")
-                                else:
-                                    h_int_edit = int(hr_val_edit)
-                                    if ampm_val_edit == "PM" and h_int_edit != 12: h_int_edit += 12
-                                    elif ampm_val_edit == "AM" and h_int_edit == 12: h_int_edit = 0
-                                    saved_time_str_edit = f"{h_int_edit:02d}:{min_val_edit}"
+                        if col_save.form_submit_button("✅ Save Changes"):
+                            f.update({"teamA": teamA_edit, "teamB": teamB_edit, "phase": phase_edit, "date": str(date_edit)})
+                            save_db(db)
+                            st.session_state[f"edit_mode_{f['id']}"] = False
+                            st.rerun()
+                        if col_cancel.form_submit_button("❌ Cancel"):
+                            st.session_state[f"edit_mode_{f['id']}"] = False
+                            st.rerun()
+                continue # Skip rendering the default view while editing
 
-                                    f["teamA"] = teamA_edit
-                                    f["teamB"] = teamB_edit
-                                    f["date"] = str(date_edit)
-                                    f["time"] = saved_time_str_edit
-                                    f["phase"] = phase_edit
-                                    save_db(db)
-                                    st.session_state[f"edit_mode_{f['id']}"] = False
-                                    st.success("Match updated!")
-                                    st.rerun()
-                        with col_cancel:
-                            if st.form_submit_button("❌ Cancel", use_container_width=True):
-                                st.session_state[f"edit_mode_{f['id']}"] = False
-                                st.rerun()
+            # Default View
+            with st.container(border=True):
+                st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
+                st.markdown(f"#### {get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}")
+                
+                col_sa, col_sb, col_btn = st.columns([1, 1, 1])
+                with col_sa: 
+                    val_sa = st.number_input(f"{f['teamA']} Score", min_value=0, max_value=20, value=f["scoreA"] or 0, key=f"sa_{f['id']}")
+                with col_sb: 
+                    val_sb = st.number_input(f"{f['teamB']} Score", min_value=0, max_value=20, value=f["scoreB"] or 0, key=f"sb_{f['id']}")
+                with col_btn:
+                    st.write("###") 
+                    if st.button("✅ Finish Match", key=f"fin_{f['id']}", use_container_width=True, type="primary"):
+                        f.update({"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"})
+                        save_db(db)
+                        st.rerun()
+                
+                if st.button("✏️ Edit Details", key=f"edit_btn_{f['id']}"):
+                    st.session_state[f"edit_mode_{f['id']}"] = True
+                    st.rerun()
 
+    st.subheader("🟢 Finished Matches")
+    if not finished:
+        st.info("No finished games.")
+    else:
+        with st.expander("View Concluded Matches"):
+            for f in finished:
+                st.markdown(f"**{f['teamA']} {f['scoreA']} - {f['scoreB']} {f['teamB']}** ({f['phase']})")
 # --- TAB: PARTICIPANTS ---
 elif menu == "Participants":
     st.title("👥 Registry")
