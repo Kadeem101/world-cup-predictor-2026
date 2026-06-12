@@ -227,7 +227,7 @@ if menu == "Leaderboard":
                 
             df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
             
-            st.write("### 🔍 Matrix Display Options")
+            
             col_filt1, col_filt2 = st.columns([2, 1])
             with col_filt1:
                 filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
