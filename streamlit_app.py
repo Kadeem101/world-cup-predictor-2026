@@ -120,17 +120,19 @@ if st.session_state.admin_authenticated:
         st.session_state.admin_authenticated = False
         st.rerun()
 
-options = ["Leaderboard", "My Predictions"]
+# -------------------------------------------------------------
+# UPDATED MENU LOGIC: Leaderboard is the only public page.
+# -------------------------------------------------------------
+options = ["Leaderboard"]
 if is_admin:
-    options += ["Manage Games", "Participants", "Share & Export"]
+    options += ["Enter/Update Scores", "Manage Games", "Participants", "Share & Export"]
 
 menu = st.sidebar.radio("Menu", options)
 
 # --- TAB: LEADERBOARD ---
 if menu == "Leaderboard":
-    st.title("🏆 Tournament Central")
+    st.title("🏆 Leaderboard")
     
-    # 1. Use Tabs to separate simple standings from the full matrix view
     tab_standings, tab_matrix = st.tabs(["📊 Standings & Fixtures", "👁️ Extended View"])
     
     with tab_standings:
@@ -146,14 +148,14 @@ if menu == "Leaderboard":
                     if pts == 4: exact += 1
                     if pts >= 3: outcome += 1
                     total += pts
-            leader_rows.append({"Competitor": p["name"], "Total Pts": total, "Exact (4)": exact, "Won / Draw (3)": outcome})
+            leader_rows.append({"Participant": p["name"], "Total Pts": total, "Exact (4)": exact, "Won / Draw (3)": outcome})
         
         if leader_rows:
             df = pd.DataFrame(leader_rows).sort_values(by="Total Pts", ascending=False).reset_index(drop=True)
             df.index += 1
             st.dataframe(df, use_container_width=True)
         else:
-            st.info("No competitors registered on the leaderboard yet.")
+            st.info("No participants registered on the leaderboard yet.")
 
         st.subheader("🟢 Finished Matches")
         finished_matches = [f for f in db.get("fixtures", []) if f["status"] == "FINISHED"]
@@ -182,11 +184,9 @@ if menu == "Leaderboard":
         if not participants or not fixtures:
             st.info("The performance matrix will populate once matches and participants are configured.")
         else:
-            # 2. Extract unified data logic (reused seamlessly from your Export tab)
             unified_data = []
             match_headers_list = []
             
-            # Map clean names for headers first
             for f in fixtures:
                 is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                 match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]" if is_finished else f"{f['teamA']} vs {f['teamB']} [Pending]"
@@ -227,15 +227,13 @@ if menu == "Leaderboard":
                 
             df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
             
-            # 3. Dynamic layout controls for mobile friendliness
-            st.write("### Extended View")
+            st.write("### 🔍 Matrix Display Options")
             col_filt1, col_filt2 = st.columns([2, 1])
             with col_filt1:
-                filter_matches = st.multiselect("Filter by Specific Matches (Trims table width on Mobile):", options=match_headers_list, placeholder="Showing all matches...")
+                filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
             with col_filt2:
-                search_player = st.text_input("Find Competitor:", placeholder="Type name...")
+                search_player = st.text_input("Find Participant:", placeholder="Type name...")
             
-            # Filter rows/columns dynamically based on interaction
             df_filtered = df_unified.copy()
             if search_player:
                 df_filtered = df_filtered[df_filtered["Participant"].str.contains(search_player, case=False, na=False)]
@@ -243,12 +241,10 @@ if menu == "Leaderboard":
                 keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
                 df_filtered = df_filtered[keep_cols]
                 
-            # Render clean matrix table
             st.dataframe(df_filtered, use_container_width=True, hide_index=True)
             
-            # 4. Ultimate Mobile Optimization: Vertical Card Drill-Down
             st.markdown("---")
-            st.write("### 👀 See what other participants predicted")
+            st.write("### 👀 See what others predicted")
             selected_p_name = st.selectbox("Select a participant to view their full prediction list:", options=[p["name"] for p in participants])
             
             target_row = next((row for row in unified_data if row["Participant"] == selected_p_name), None)
@@ -262,9 +258,9 @@ if menu == "Leaderboard":
                     for m_header in match_headers_list:
                         st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
 
-# --- TAB: MY PREDICTIONS ---
-elif menu == "My Predictions":
-    st.title("📝 My Predictions")
+# --- TAB: ENTER/UPDATE SCORES (ADMIN ONLY) ---
+elif menu == "Enter/Update Scores":
+    st.title("📝 Enter/Update Scores")
     participants = db.get("participants", [])
     fixtures = db.get("fixtures", [])
     
@@ -279,53 +275,39 @@ elif menu == "My Predictions":
         preds = db.get("predictions", [])
         saved_preds_dict = {(p["participantId"], p["fixtureId"]): p for p in preds}
         
-        if is_admin:
-            updated_preds = []
-            with st.form("prediction_submission_form", clear_on_submit=False):
-                st.markdown(f"### Editing Matrix for: **{part_dict[selected_id]}**")
-                for f in fixtures:
-                    curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
-                    default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else None
-                    default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else None
-                    
-                    with st.container(border=True):
-                        st.caption(f"{format_date(f['date'])}")
-                        st.markdown(f"#### {get_flag(f['teamA'])} {f['teamA']} 🆚 {f['teamB']} {get_flag(f['teamB'])}")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            val_A = st.number_input(f"{f['teamA']}", min_value=0, max_value=20, value=default_val_A, key=f"predA_{f['id']}_{selected_id}")
-                        with col2:
-                            val_B = st.number_input(f"{f['teamB']}", min_value=0, max_value=20, value=default_val_B, key=f"predB_{f['id']}_{selected_id}")
-                            
-                    updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
-                    
-                if st.form_submit_button("💾 Save Predictions", use_container_width=True):
-                    other_preds = [p for p in preds if p["participantId"] != selected_id]
-                    db["predictions"] = other_preds + updated_preds
-                    save_db(db)
-                    st.success(f"Updated successfully for {part_dict[selected_id]}!")
-                    st.rerun()
-
-            # --- NEW: Clear Scores Button ---
-            st.markdown("---")
-            st.markdown("#### Danger Zone")
-            if st.button(f"🗑️ Clear All Predictions for {part_dict[selected_id]}", type="primary", use_container_width=True):
-                # Filter out the predictions for the currently selected user
-                db["predictions"] = [p for p in db["predictions"] if p["participantId"] != selected_id]
-                save_db(db)
-                st.warning(f"All logged predictions for {part_dict[selected_id]} have been wiped.")
-                st.rerun()
-
-        else:
+        updated_preds = []
+        with st.form("prediction_submission_form", clear_on_submit=False):
+            st.markdown(f"### Edit/Update Scores for: **{part_dict[selected_id]}**")
             for f in fixtures:
-                curr = saved_preds_dict.get((selected_id, f["id"]))
+                curr_pred = saved_preds_dict.get((selected_id, f["id"]), None)
+                default_val_A = int(curr_pred["scoreA"]) if (curr_pred is not None and curr_pred.get("scoreA") is not None) else None
+                default_val_B = int(curr_pred["scoreB"]) if (curr_pred is not None and curr_pred.get("scoreB") is not None) else None
+                
                 with st.container(border=True):
                     st.caption(f"{format_date(f['date'])}")
-                    st.markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                    if curr and curr.get('scoreA') is not None and curr.get('scoreB') is not None:
-                        st.success(f"Prediction: **{get_flag(f['teamA'])} {curr['scoreA']} - {curr['scoreB']} {get_flag(f['teamB'])}**")
-                    else:
-                        st.info("No prediction logged")
+                    st.markdown(f"#### {get_flag(f['teamA'])} {f['teamA']} 🆚 {f['teamB']} {get_flag(f['teamB'])}")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        val_A = st.number_input(f"{f['teamA']}", min_value=0, max_value=20, value=default_val_A, key=f"predA_{f['id']}_{selected_id}")
+                    with col2:
+                        val_B = st.number_input(f"{f['teamB']}", min_value=0, max_value=20, value=default_val_B, key=f"predB_{f['id']}_{selected_id}")
+                        
+                updated_preds.append({"participantId": selected_id, "fixtureId": f["id"], "scoreA": val_A, "scoreB": val_B})
+                
+            if st.form_submit_button("💾 Save Predictions", use_container_width=True):
+                other_preds = [p for p in preds if p["participantId"] != selected_id]
+                db["predictions"] = other_preds + updated_preds
+                save_db(db)
+                st.success(f"Updated successfully for {part_dict[selected_id]}!")
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown("#### Danger Zone")
+        if st.button(f"🗑️ Clear All Predictions for {part_dict[selected_id]}", type="primary", use_container_width=True):
+            db["predictions"] = [p for p in db["predictions"] if p["participantId"] != selected_id]
+            save_db(db)
+            st.warning(f"All logged predictions for {part_dict[selected_id]} have been wiped.")
+            st.rerun()
 
 # --- TAB: MANAGE GAMES ---
 elif menu == "Manage Games":
