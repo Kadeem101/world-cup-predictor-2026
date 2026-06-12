@@ -133,7 +133,7 @@ menu = st.sidebar.radio("Menu", options)
 if menu == "Leaderboard":
     st.title("🏆 Leaderboard")
     
-    tab_standings, tab_matrix = st.tabs(["📊 Standings & Fixtures", "👁️ Extended View"])
+    tab_standings, tab_matrix = st.tabs(["📊 Standings & Fixtures", "👀 Extended View"])
     
     with tab_standings:
         leader_rows = []
