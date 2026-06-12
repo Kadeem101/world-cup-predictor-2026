@@ -247,7 +247,7 @@ if menu == "Leaderboard":
                 c2.metric("Exact Scores", target_row["Exact (4pt)"])
                 c3.metric("Correct Outcomes", target_row["Outcome (3pt)"])
                 
-                with st.expander(f"View Full Match Matrix Cards for {selected_p_name}", expanded=True):
+                with st.expander(f"View Full Match Details for {selected_p_name}", expanded=True):
                     for m_header in match_headers_list:
                         st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
 
