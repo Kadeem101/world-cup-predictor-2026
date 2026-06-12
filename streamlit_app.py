@@ -217,7 +217,7 @@ if menu == "Leaderboard":
                         else:
                             match_breakdowns[match_header] = pred_str
                     else:
-                        match_breakdowns[match_header] = "Unselected"
+                        match_breakdowns[match_header] = "---"
                 
                 row_data["Total Points"] = total_score
                 row_data["Exact (4pt)"] = exact_count
@@ -486,7 +486,7 @@ elif menu == "Share & Export":
                     else:
                         match_breakdowns[match_header] = pred_str
                 else:
-                    match_breakdowns[match_header] = "Unselected (0 pts)" if is_finished else "Unselected"
+                    match_breakdowns[match_header] = "--- (0 pts)" if is_finished else "---"
             
             row_data["Total Points"] = total_score
             row_data["Exact Scores (4pt)"] = exact_count
