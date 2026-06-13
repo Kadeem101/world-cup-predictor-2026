@@ -323,6 +323,7 @@ if not show_admin_panel:
                 part_id = participant["id"]
                 fixtures = db.get("fixtures", [])
                 preds = db.get("predictions", [])
+                today_str = datetime.now().strftime("%Y-%m-%d") # Today's date for logic
                 
                 def get_existing_pred(fid): return next((p for p in preds if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
@@ -348,8 +349,14 @@ if not show_admin_panel:
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
+                            # Logic for "TODAY" display
+                            if f.get('date') == today_str:
+                                date_text = "🚨 :red[**TODAY**]"
+                            else:
+                                date_text = format_date(f.get('date', ''))
+                            
                             with st.container(border=True):
-                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))} - {format_time(f.get('time', ''))}")
+                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} ⏰ {format_time(f.get('time', ''))}")
                                 cols = st.columns([3, 1, 1, 1])
                                 cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                                 vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
@@ -400,7 +407,6 @@ if not show_admin_panel:
             st.markdown("- **3rd Place:** 20% of the total funds collected.")
             
             st.divider()
-            # st.link_button("📲 Invite & Share with Friends via WhatsApp", "https://wa.me/?text=Check%20out%20my%20World%20Cup%202026%20predictions%20board!", use_container_width=True)
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
