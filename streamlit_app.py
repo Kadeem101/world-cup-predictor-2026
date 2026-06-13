@@ -201,11 +201,11 @@ if not show_admin_panel:
                         
                         # Logic to check if the match date is 'Today'
                         if f.get('date') == today_str:
-                            date_text = " :red[**TODAY**]"
+                            date_text = "🚨 :red[**TODAY**]"
                         else:
                             date_text = format_date(f.get('date', ''))
                             
-                        st.caption(f"**{phase_text}** | {date_text} at {time_text}")
+                        st.caption(f"**{phase_text}** | {date_text} ⏰ {time_text}")
                         st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                         
         with tab_finished:
@@ -298,7 +298,7 @@ if not show_admin_panel:
             st.markdown("---")
             
             # Incorporated global matrix expander
-            with st.expander("📊 View Full Matrix (All Players vs All Matches)"):
+            with st.expander("📊 View Extended Standings"):
                 filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
                 df_filtered = df_unified.copy()
                 if filter_matches:
@@ -352,8 +352,8 @@ if not show_admin_panel:
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))} - {format_time(f.get('time', ''))}")
                                 cols = st.columns([3, 1, 1, 1])
                                 cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
-                                vA = cols[1].number_input("A", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}", label_visibility="collapsed")
-                                vB = cols[2].number_input("B", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}", label_visibility="collapsed")
+                                vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
+                                vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
                                 if cols[3].button("Save", key=f"btn_{f['id']}", use_container_width=True):
                                     new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": vA, "scoreB": vB}
                                     db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
