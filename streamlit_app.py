@@ -205,7 +205,7 @@ if not show_admin_panel:
                         else:
                             date_text = format_date(f.get('date', ''))
                             
-                        st.caption(f"**{phase_text}** | {date_text} ⏰ {time_text}")
+                        st.caption(f"**{phase_text}** | {date_text} @  {time_text}")
                         st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                         
         with tab_finished:
@@ -356,7 +356,7 @@ if not show_admin_panel:
                                 date_text = format_date(f.get('date', ''))
                             
                             with st.container(border=True):
-                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} ⏰ {format_time(f.get('time', ''))}")
+                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @  {format_time(f.get('time', ''))}")
                                 cols = st.columns([3, 1, 1, 1])
                                 cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                                 vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
