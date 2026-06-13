@@ -299,7 +299,7 @@ if not show_admin_panel:
             st.markdown("---")
             
             # Incorporated global matrix expander
-            with st.expander("📊 View Full Matrix (All Players vs All Matches)"):
+            with st.expander("📊 View Full Details (All Players vs All Matches)"):
                 filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
                 df_filtered = df_unified.copy()
                 if filter_matches:
