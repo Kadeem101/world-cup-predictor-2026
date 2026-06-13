@@ -157,7 +157,8 @@ with st.sidebar:
         if st.button("🚪 Close Session", use_container_width=True):
             st.session_state.admin_authenticated = False; st.rerun()
         st.divider()
-        admin_menu = st.radio("Admin Actions", ["⬅️ Exit to Dashboard", "⚙️ Manage Games", "👥 Participants", "📥 Share & Export"])
+        # ADDED "Edit Predictions" TO THE ADMIN MENU
+        admin_menu = st.radio("Admin Actions", ["⬅️ Exit to Dashboard", "⚙️ Manage Games", "👥 Participants", "📝 Edit Predictions", "📥 Share & Export"])
         if admin_menu != "⬅️ Exit to Dashboard":
             show_admin_panel = True
 
@@ -205,7 +206,7 @@ if not show_admin_panel:
                         else:
                             date_text = format_date(f.get('date', ''))
                             
-                        st.caption(f"**{phase_text}** | {date_text} @  {time_text}")
+                        st.caption(f"**{phase_text}** | {date_text} @ {time_text}")
                         st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                         
         with tab_finished:
@@ -298,7 +299,7 @@ if not show_admin_panel:
             st.markdown("---")
             
             # Incorporated global matrix expander
-            with st.expander("📊 View Extended Standings"):
+            with st.expander("📊 View Full Matrix (All Players vs All Matches)"):
                 filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
                 df_filtered = df_unified.copy()
                 if filter_matches:
@@ -356,12 +357,19 @@ if not show_admin_panel:
                                 date_text = format_date(f.get('date', ''))
                             
                             with st.container(border=True):
-                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @  {format_time(f.get('time', ''))}")
-                                cols = st.columns([3, 1, 1, 1])
+                                st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
+                                
+                                # Row 1: The Inputs
+                                cols = st.columns([3, 1, 1])
                                 cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                                 vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
                                 vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
-                                if cols[3].button("Save", key=f"btn_{f['id']}", use_container_width=True):
+                                
+                                # Row 2: Two-Step Confirmation logic
+                                conf_cols = st.columns([2, 1])
+                                confirm_check = conf_cols[0].checkbox(f"Confirm: **{vA} - {vB}**", key=f"chk_{f['id']}")
+                                
+                                if conf_cols[1].button("Save", key=f"btn_{f['id']}", disabled=not confirm_check, use_container_width=True, type="primary"):
                                     new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": vA, "scoreB": vB}
                                     db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
                                     save_db(db)
@@ -369,7 +377,7 @@ if not show_admin_panel:
                                     st.rerun()
 
                 with tab_locked:
-                    # UPDATED: Show matches that are finished OR matches the user has already predicted
+                    # USERS CAN ONLY VIEW - NO EDITING TO PREVENT CHEATING
                     locked_fixtures = [f for f in fixtures if f.get("status") == "FINISHED" or get_existing_pred(f["id"]) is not None]
                     if locked_fixtures:
                         for f in locked_fixtures:
@@ -407,6 +415,7 @@ if not show_admin_panel:
             st.markdown("- **3rd Place:** 20% of the total funds collected.")
             
             st.divider()
+            # st.link_button("📲 Invite & Share with Friends via WhatsApp", "https://wa.me/?text=Check%20out%20my%20World%20Cup%202026%20predictions%20board!", use_container_width=True)
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
@@ -473,6 +482,55 @@ if show_admin_panel:
                     db["participants"] = [x for x in db["participants"] if x["id"] != p["id"]]
                     db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
                     save_db(db); st.rerun()
+                    
+    # --- BRAND NEW ADMIN EDIT PREDICTION SECURE OVERRIDE ---
+    elif admin_menu == "📝 Edit Predictions":
+        st.title("📝 Edit User Predictions")
+        st.info("Use this tool to securely override a user's prediction if they made an error. Users cannot edit their own scores once saved.")
+        
+        participants = db.get("participants", [])
+        fixtures = db.get("fixtures", [])
+        preds = db.get("predictions", [])
+        
+        if not participants or not fixtures:
+            st.warning("You need active participants and fixtures to use this tool.")
+        else:
+            sel_participant_name = st.selectbox("1. Select Participant", ["-- Select User --"] + [p["name"] for p in participants])
+            
+            if sel_participant_name != "-- Select User --":
+                p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
+                
+                # Create a list of matches (formatting them so they look nice in the dropdown)
+                match_options = ["-- Select Match --"] + [f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])})" for f in fixtures]
+                sel_fixture_str = st.selectbox("2. Select Match", match_options)
+                
+                if sel_fixture_str != "-- Select Match --":
+                    # Extract the teams out of the string to find the exact fixture ID
+                    team_part = sel_fixture_str.split(" (")[0]
+                    tA, tB = team_part.split(" vs ")
+                    f_id = next(f["id"] for f in fixtures if f["teamA"] == tA and f["teamB"] == tB)
+                    
+                    # Look up their current prediction if it exists
+                    curr_pred = next((p for p in preds if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
+                    
+                    with st.container(border=True):
+                        st.write(f"### Update: {tA} vs {tB}")
+                        if curr_pred:
+                            st.caption(f"Current prediction on file: **{curr_pred['scoreA']} - {curr_pred['scoreB']}**")
+                        else:
+                            st.caption("No prediction on file yet.")
+                            
+                        c1, c2 = st.columns(2)
+                        new_sa = c1.number_input(f"{tA} Score", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key="ovr_A")
+                        new_sb = c2.number_input(f"{tB} Score", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key="ovr_B")
+                        
+                        if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
+                            new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
+                            # Filter out the old prediction and append the overridden one
+                            db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
+                            save_db(db)
+                            st.success(f"Successfully updated prediction for {sel_participant_name}!")
+                            st.rerun()
 
     elif admin_menu == "📥 Share & Export":
         st.title("📸 Database Engine Backup")
