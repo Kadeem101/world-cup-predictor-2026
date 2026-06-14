@@ -338,7 +338,7 @@ if not show_admin_panel:
                 if user_preds:
                     pdf_data = generate_pdf_summary(selected_name, user_preds, fixtures)
                     st.download_button(
-                        label="📥 Download PDF Summary Sheet",
+                        label="📥 Download Your Scores (PDF)",
                         data=pdf_data,
                         file_name=f"Predictions_{selected_name}.pdf",
                         mime="application/pdf",
