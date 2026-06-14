@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import pymongo
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from fpdf import FPDF
 
@@ -193,14 +193,16 @@ if not show_admin_panel:
             if not pending_fixtures: 
                 st.info("No upcoming matches scheduled.")
             else:
-                today_str = datetime.now().strftime("%Y-%m-%d")
+                # Using AST (UTC-4) for accurate local "Today" calculation
+                ast_tz = timezone(timedelta(hours=-4))
+                today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
                 
                 for f in pending_fixtures:
                     with st.container(border=True):
                         phase_text = f.get('phase', 'Group Stage')
                         time_text = format_time(f.get('time', ''))
                         
-                        # Logic to check if the match date is 'Today'
+                        # Logic to check if the match date is 'Today' locally
                         if f.get('date') == today_str:
                             date_text = "🚨 :red[**TODAY**]"
                         else:
@@ -324,7 +326,10 @@ if not show_admin_panel:
                 part_id = participant["id"]
                 fixtures = db.get("fixtures", [])
                 preds = db.get("predictions", [])
-                today_str = datetime.now().strftime("%Y-%m-%d") # Today's date for logic
+                
+                # Using AST (UTC-4) for accurate local "Today" calculation
+                ast_tz = timezone(timedelta(hours=-4))
+                today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
                 
                 def get_existing_pred(fid): return next((p for p in preds if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
@@ -350,7 +355,7 @@ if not show_admin_panel:
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
-                            # Logic for "TODAY" display
+                            # Logic for "TODAY" display locally
                             if f.get('date') == today_str:
                                 date_text = "🚨 :red[**TODAY**]"
                             else:
@@ -367,7 +372,9 @@ if not show_admin_panel:
                                 
                                 # Row 2: Two-Step Confirmation logic
                                 conf_cols = st.columns([2, 1])
-                                confirm_check = conf_cols[0].checkbox(f"Confirm: **{vA} - {vB}**", key=f"chk_{f['id']}")
+                                # Included abbreviated names (first 3 letters) in the confirmation string
+                                label_text = f"Confirm: **{f['teamA'][:3].upper()} {vA} - {vB} {f['teamB'][:3].upper()}**"
+                                confirm_check = conf_cols[0].checkbox(label_text, key=f"chk_{f['id']}")
                                 
                                 if conf_cols[1].button("Save", key=f"btn_{f['id']}", disabled=not confirm_check, use_container_width=True, type="primary"):
                                     new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": vA, "scoreB": vB}
