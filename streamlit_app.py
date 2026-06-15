@@ -351,7 +351,7 @@ if not show_admin_panel:
                 with tab_pending:
                     # UPDATED: Only show pending matches if they haven't been predicted by the user yet
                     pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None]
-                    if not pending_fixtures: st.info("No upcoming matches to predict.")
+                    if not pending_fixtures: st.info("All your predictions are in for now.")
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
