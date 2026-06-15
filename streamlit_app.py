@@ -15,6 +15,23 @@ st.markdown("""
     
     /* Perfect column vertical alignment */
     [data-testid="column"] { display: flex; align-items: center; }
+
+    /* SURGICAL CSS TO HIDE SPECIFIC CLOUD/TOOLBAR ELEMENTS ONLY */
+    
+    /* 1. Hide the Share / Deploy Button */
+    .stDeployButton, [data-testid="stAppDeployButton"] { display: none !important; }
+    
+    /* 2. Hide the GitHub, Favorites, and Edit icons specifically (Leaves 3-dots menu alone) */
+    [data-testid="stToolbarActionButton"] { display: none !important; }
+    
+    /* 3. Hide the Streamlit Community Cloud overlay badges (Removes "Manage app" and floating GitHub icons) */
+    .viewerBadge_container__1QSob, 
+    .styles_viewerBadge__1yB5_,
+    .viewerBadge_link__1S137,
+    .viewerBadge_text__1JaDK { display: none !important; }
+    
+    /* 4. Hide the standard Streamlit footer at the bottom */
+    footer { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -421,7 +438,6 @@ if not show_admin_panel:
             st.markdown("- **3rd Place:** 20% of the total funds collected.")
             
             st.divider()
-            # st.link_button("📲 Invite & Share with Friends via WhatsApp", "https://wa.me/?text=Check%20out%20my%20World%20Cup%202026%20predictions%20board!", use_container_width=True)
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
@@ -463,7 +479,6 @@ if show_admin_panel:
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
                 cols = st.columns([3, 1, 1, 2])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                # UPDATED: Set labels to team names and removed label_visibility="collapsed" to show them above the inputs
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
                 with cols[3]:
@@ -490,7 +505,6 @@ if show_admin_panel:
                     db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
                     save_db(db); st.rerun()
                     
-    # --- BRAND NEW ADMIN EDIT PREDICTION SECURE OVERRIDE ---
     elif admin_menu == "📝 Edit Predictions":
         st.title("📝 Edit User Predictions")
         st.info("Use this tool to securely override a user's prediction if they made an error. Users cannot edit their own scores once saved.")
@@ -507,17 +521,14 @@ if show_admin_panel:
             if sel_participant_name != "-- Select User --":
                 p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
                 
-                # Create a list of matches (formatting them so they look nice in the dropdown)
                 match_options = ["-- Select Match --"] + [f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])})" for f in fixtures]
                 sel_fixture_str = st.selectbox("2. Select Match", match_options)
                 
                 if sel_fixture_str != "-- Select Match --":
-                    # Extract the teams out of the string to find the exact fixture ID
                     team_part = sel_fixture_str.split(" (")[0]
                     tA, tB = team_part.split(" vs ")
                     f_id = next(f["id"] for f in fixtures if f["teamA"] == tA and f["teamB"] == tB)
                     
-                    # Look up their current prediction if it exists
                     curr_pred = next((p for p in preds if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
                     
                     with st.container(border=True):
@@ -533,7 +544,6 @@ if show_admin_panel:
                         
                         if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
                             new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
-                            # Filter out the old prediction and append the overridden one
                             db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
                             save_db(db)
                             st.success(f"Successfully updated prediction for {sel_participant_name}!")
