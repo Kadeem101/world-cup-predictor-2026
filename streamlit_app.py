@@ -20,7 +20,7 @@ st.markdown("""
 
 # --- CONFIGURATION ---
 TEAMS = [
-    "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
+    "Algeria", "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
     "Brazil", "Canada", "Cape Verde", "Colombia", "Croatia", "Curaçao", 
     "Czechia", "DR Congo", "Ecuador", "Egypt", "England", "France", 
     "Germany", "Ghana", "Haiti", "Iran", "Iraq", "Ivory Coast", "Japan", 
@@ -31,30 +31,30 @@ TEAMS = [
 ]
 
 FLAGS = {
-    "Argentina": "![AR](https://flagcdn.com/16x12/ar.png)", "Australia": "![AU](https://flagcdn.com/16x12/au.png)", 
-    "Austria": "![AT](https://flagcdn.com/16x12/at.png)", "Belgium": "![BE](https://flagcdn.com/16x12/be.png)",
-    "Bosnia and Herzegovina": "![BA](https://flagcdn.com/16x12/ba.png)", "Brazil": "![BR](https://flagcdn.com/16x12/br.png)", 
-    "Canada": "![CA](https://flagcdn.com/16x12/ca.png)", "Cape Verde": "![CV](https://flagcdn.com/16x12/cv.png)",
-    "Colombia": "![CO](https://flagcdn.com/16x12/co.png)", "Croatia": "![HR](https://flagcdn.com/16x12/hr.png)", 
-    "Curaçao": "![CW](https://flagcdn.com/16x12/cw.png)", "Czechia": "![CZ](https://flagcdn.com/16x12/cz.png)",
-    "DR Congo": "![CD](https://flagcdn.com/16x12/cd.png)", "Ecuador": "![EC](https://flagcdn.com/16x12/ec.png)", 
-    "Egypt": "![EG](https://flagcdn.com/16x12/eg.png)", "England": "![GB-ENG](https://flagcdn.com/16x12/gb-eng.png)",
-    "France": "![FR](https://flagcdn.com/16x12/fr.png)", "Germany": "![DE](https://flagcdn.com/16x12/de.png)", 
-    "Ghana": "![GH](https://flagcdn.com/16x12/gh.png)", "Haiti": "![HT](https://flagcdn.com/16x12/ht.png)",
-    "Iran": "![IR](https://flagcdn.com/16x12/ir.png)", "Iraq": "![IQ](https://flagcdn.com/16x12/iq.png)", 
-    "Ivory Coast": "![CI](https://flagcdn.com/16x12/ci.png)", "Japan": "![JP](https://flagcdn.com/16x12/jp.png)",
-    "Jordan": "![JO](https://flagcdn.com/16x12/jo.png)", "Mexico": "![MX](https://flagcdn.com/16x12/mx.png)", 
-    "Morocco": "![MA](https://flagcdn.com/16x12/ma.png)", "Netherlands": "![NL](https://flagcdn.com/16x12/nl.png)",
-    "New Zealand": "![NZ](https://flagcdn.com/16x12/nz.png)", "Norway": "![NO](https://flagcdn.com/16x12/no.png)", 
-    "Panama": "![PA](https://flagcdn.com/16x12/pa.png)", "Paraguay": "![PY](https://flagcdn.com/16x12/py.png)",
-    "Portugal": "![PT](https://flagcdn.com/16x12/pt.png)", "Qatar": "![QA](https://flagcdn.com/16x12/qa.png)", 
-    "Saudi Arabia": "![SA](https://flagcdn.com/16x12/sa.png)", "Scotland": "![GB-SCT](https://flagcdn.com/16x12/gb-sct.png)",
-    "Senegal": "![SN](https://flagcdn.com/16x12/sn.png)", "South Africa": "![ZA](https://flagcdn.com/16x12/za.png)", 
-    "South Korea": "![KR](https://flagcdn.com/16x12/kr.png)", "Spain": "![ES](https://flagcdn.com/16x12/es.png)",
-    "Sweden": "![SE](https://flagcdn.com/16x12/se.png)", "Switzerland": "![CH](https://flagcdn.com/16x12/ch.png)", 
-    "Tunisia": "![TN](https://flagcdn.com/16x12/tn.png)", "Turkey": "![TR](https://flagcdn.com/16x12/tr.png)",
-    "USA": "![US](https://flagcdn.com/16x12/us.png)", "Uruguay": "![UY](https://flagcdn.com/16x12/uy.png)", 
-    "Uzbekistan": "![UZ](https://flagcdn.com/16x12/uz.png)"
+    "Algeria": "![DZ](https://flagcdn.com/16x12/dz.png)", "Argentina": "![AR](https://flagcdn.com/16x12/ar.png)", 
+    "Australia": "![AU](https://flagcdn.com/16x12/au.png)", "Austria": "![AT](https://flagcdn.com/16x12/at.png)", 
+    "Belgium": "![BE](https://flagcdn.com/16x12/be.png)", "Bosnia and Herzegovina": "![BA](https://flagcdn.com/16x12/ba.png)", 
+    "Brazil": "![BR](https://flagcdn.com/16x12/br.png)", "Canada": "![CA](https://flagcdn.com/16x12/ca.png)", 
+    "Cape Verde": "![CV](https://flagcdn.com/16x12/cv.png)", "Colombia": "![CO](https://flagcdn.com/16x12/co.png)", 
+    "Croatia": "![HR](https://flagcdn.com/16x12/hr.png)", "Curaçao": "![CW](https://flagcdn.com/16x12/cw.png)", 
+    "Czechia": "![CZ](https://flagcdn.com/16x12/cz.png)", "DR Congo": "![CD](https://flagcdn.com/16x12/cd.png)", 
+    "Ecuador": "![EC](https://flagcdn.com/16x12/ec.png)", "Egypt": "![EG](https://flagcdn.com/16x12/eg.png)", 
+    "England": "![GB-ENG](https://flagcdn.com/16x12/gb-eng.png)", "France": "![FR](https://flagcdn.com/16x12/fr.png)", 
+    "Germany": "![DE](https://flagcdn.com/16x12/de.png)", "Ghana": "![GH](https://flagcdn.com/16x12/gh.png)", 
+    "Haiti": "![HT](https://flagcdn.com/16x12/ht.png)", "Iran": "![IR](https://flagcdn.com/16x12/ir.png)", 
+    "Iraq": "![IQ](https://flagcdn.com/16x12/iq.png)", "Ivory Coast": "![CI](https://flagcdn.com/16x12/ci.png)", 
+    "Japan": "![JP](https://flagcdn.com/16x12/jp.png)", "Jordan": "![JO](https://flagcdn.com/16x12/jo.png)", 
+    "Mexico": "![MX](https://flagcdn.com/16x12/mx.png)", "Morocco": "![MA](https://flagcdn.com/16x12/ma.png)", 
+    "Netherlands": "![NL](https://flagcdn.com/16x12/nl.png)", "New Zealand": "![NZ](https://flagcdn.com/16x12/nz.png)", 
+    "Norway": "![NO](https://flagcdn.com/16x12/no.png)", "Panama": "![PA](https://flagcdn.com/16x12/pa.png)", 
+    "Paraguay": "![PY](https://flagcdn.com/16x12/py.png)", "Portugal": "![PT](https://flagcdn.com/16x12/pt.png)", 
+    "Qatar": "![QA](https://flagcdn.com/16x12/qa.png)", "Saudi Arabia": "![SA](https://flagcdn.com/16x12/sa.png)", 
+    "Scotland": "![GB-SCT](https://flagcdn.com/16x12/gb-sct.png)", "Senegal": "![SN](https://flagcdn.com/16x12/sn.png)", 
+    "South Africa": "![ZA](https://flagcdn.com/16x12/za.png)", "South Korea": "![KR](https://flagcdn.com/16x12/kr.png)", 
+    "Spain": "![ES](https://flagcdn.com/16x12/es.png)", "Sweden": "![SE](https://flagcdn.com/16x12/se.png)", 
+    "Switzerland": "![CH](https://flagcdn.com/16x12/ch.png)", "Tunisia": "![TN](https://flagcdn.com/16x12/tn.png)", 
+    "Turkey": "![TR](https://flagcdn.com/16x12/tr.png)", "USA": "![US](https://flagcdn.com/16x12/us.png)", 
+    "Uruguay": "![UY](https://flagcdn.com/16x12/uy.png)", "Uzbekistan": "![UZ](https://flagcdn.com/16x12/uz.png)"
 }
 
 # --- DATABASE SETUP ---
