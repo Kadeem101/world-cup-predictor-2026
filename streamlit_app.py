@@ -138,7 +138,7 @@ def generate_pdf_summary(name, predictions, fixtures):
 st.set_page_config(layout="wide", page_title="WC2026 Dashboard")
 db = load_db()
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
-if "active_tab" not in st.session_state: st.session_state.active_tab = "Upcoming Matches"
+if "active_tab" not in st.session_state: st.session_state.active_tab = "Enter Scores"
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -167,12 +167,12 @@ with st.sidebar:
 # ==========================================
 if not show_admin_panel:
     col1, col2, col3, col4 = st.columns(4, gap="small")
-    if col1.button("📅 Upcoming Matches", use_container_width=True, type="primary" if st.session_state.active_tab == "Upcoming Matches" else "secondary"):
-        st.session_state.active_tab = "Upcoming Matches"; st.rerun()
+    if col1.button("📝 Enter Scores", use_container_width=True, type="primary" if st.session_state.active_tab == "Enter Scores" else "secondary"):
+        st.session_state.active_tab = "Enter Scores"; st.rerun()
     if col2.button("🏆 View Standings", use_container_width=True, type="primary" if st.session_state.active_tab == "View Standings" else "secondary"):
         st.session_state.active_tab = "View Standings"; st.rerun()
-    if col3.button("📝 Enter Scores", use_container_width=True, type="primary" if st.session_state.active_tab == "Enter Scores" else "secondary"):
-        st.session_state.active_tab = "Enter Scores"; st.rerun()
+    if col3.button("📅 Upcoming Matches", use_container_width=True, type="primary" if st.session_state.active_tab == "Upcoming Matches" else "secondary"):
+        st.session_state.active_tab = "Upcoming Matches"; st.rerun()
     if col4.button("📜 Rules", use_container_width=True, type="primary" if st.session_state.active_tab == "Rules" else "secondary"):
         st.session_state.active_tab = "Rules"; st.rerun()
 
