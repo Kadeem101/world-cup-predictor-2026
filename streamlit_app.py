@@ -15,18 +15,27 @@ st.markdown("""
     
     /* Perfect column vertical alignment */
     [data-testid="column"] { display: flex; align-items: center; }
+
+    /* Hide the Share / Deploy button */
+    .stDeployButton, [data-testid="stAppDeployButton"] { display: none !important; }
+    
+    /* Hide the GitHub, Favorites, and Edit icons toolbar */
+    [data-testid="stToolbar"] { display: none !important; }
+    
+    /* Hide the 'Manage app' and Streamlit footer at the bottom */
+    footer { visibility: hidden !important; height: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
 TEAMS = [
     "Algeria", "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
-    "Brazil", "Canada", "Cape Verde", "Colombia", "Croatia", "Curaçao", 
-    "Czechia", "DR Congo", "Ecuador", "Egypt", "England", "France", 
-    "Germany", "Ghana", "Haiti", "Iran", "Iraq", "Ivory Coast", "Japan", 
-    "Jordan", "Mexico", "Morocco", "Netherlands", "New Zealand", "Norway", 
-    "Panama", "Paraguay", "Portugal", "Qatar", "Saudi Arabia", "Scotland", 
-    "Senegal", "South Africa", "South Korea", "Spain", "Sweden", 
+    "Brazil", "Canada", "Cape Verde", "Colombia", "Croatia", "Curaçao", \
+    "Czechia", "DR Congo", "Ecuador", "Egypt", "England", "France", \
+    "Germany", "Ghana", "Haiti", "Iran", "Iraq", "Ivory Coast", "Japan", \
+    "Jordan", "Mexico", "Morocco", "Netherlands", "New Zealand", "Norway", \
+    "Panama", "Paraguay", "Portugal", "Qatar", "Saudi Arabia", "Scotland", \
+    "Senegal", "South Africa", "South Korea", "Spain", "Sweden", \
     "Switzerland", "Tunisia", "Turkey", "USA", "Uruguay", "Uzbekistan"
 ]
 
@@ -348,7 +357,7 @@ if not show_admin_panel:
                 tab_pending, tab_locked = st.tabs(["⏳ Pending Matchups", "🟢 Locked Matchups"])
                 
                 with tab_pending:
-                    # UPDATED: Only show pending matches if they haven't been predicted by the user yet
+                    # Only show pending matches if they haven't been predicted by the user yet
                     pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None]
                     if not pending_fixtures: st.info("No upcoming matches to predict.")
                     else:
@@ -421,7 +430,6 @@ if not show_admin_panel:
             st.markdown("- **3rd Place:** 20% of the total funds collected.")
             
             st.divider()
-            # st.link_button("📲 Invite & Share with Friends via WhatsApp", "https://wa.me/?text=Check%20out%20my%20World%20Cup%202026%20predictions%20board!", use_container_width=True)
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
@@ -463,7 +471,6 @@ if show_admin_panel:
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
                 cols = st.columns([3, 1, 1, 2])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                # UPDATED: Set labels to team names and removed label_visibility="collapsed" to show them above the inputs
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
                 with cols[3]:
