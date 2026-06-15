@@ -157,7 +157,6 @@ with st.sidebar:
         if st.button("🚪 Close Session", use_container_width=True):
             st.session_state.admin_authenticated = False; st.rerun()
         st.divider()
-        # ADDED "Edit Predictions" TO THE ADMIN MENU
         admin_menu = st.radio("Admin Actions", ["⬅️ Exit to Dashboard", "⚙️ Manage Games", "👥 Participants", "📝 Edit Predictions", "📥 Share & Export"])
         if admin_menu != "⬅️ Exit to Dashboard":
             show_admin_panel = True
@@ -351,7 +350,7 @@ if not show_admin_panel:
                 with tab_pending:
                     # UPDATED: Only show pending matches if they haven't been predicted by the user yet
                     pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None]
-                    if not pending_fixtures: st.info("All your scores are in for now.")
+                    if not pending_fixtures: st.info("No upcoming matches to predict.")
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
@@ -464,8 +463,9 @@ if show_admin_panel:
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
                 cols = st.columns([3, 1, 1, 2])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                val_sa = cols[1].number_input("A", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}", label_visibility="collapsed")
-                val_sb = cols[2].number_input("B", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}", label_visibility="collapsed")
+                # UPDATED: Set labels to team names and removed label_visibility="collapsed" to show them above the inputs
+                val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
+                val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
                 with cols[3]:
                     if st.button("✅ Finish", key=f"fin_{f['id']}", use_container_width=True):
                         f.update({"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"})
