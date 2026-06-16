@@ -302,7 +302,7 @@ if not show_admin_panel:
                     if pending_count > 0:
                         st.warning(f"⚠️ {pending_count} still open", icon=None)
                     else:
-                        st.success("✅ All done!")
+                        st.success("✅ All done for now!")
                 st.write("")
 
                 tab_pending, tab_schedule = st.tabs(["⏳ Pending Matchups", "📅 Full Schedule"])
@@ -365,7 +365,7 @@ if not show_admin_panel:
                                         res = f"{f.get('scoreA', '?')}-{f.get('scoreB', '?')}"
                                         curr_pred = get_existing_pred(f["id"])
                                         my_pred = f"| Your Pick: **{curr_pred['scoreA']}-{curr_pred['scoreB']}**" if curr_pred else "| No prediction"
-                                        st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))} ✅ Final")
+                                        st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))} ✅ Done")
                                         st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** {res} **{f['teamB']}** {get_flag(f['teamB'])} {my_pred}")
                                     else:
                                         date_text = "🚨 :red[**TODAY**]" if f.get('date') == today_str else format_date(f.get('date', ''))
