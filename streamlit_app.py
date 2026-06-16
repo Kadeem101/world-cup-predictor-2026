@@ -171,6 +171,9 @@ today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 if "active_tab" not in st.session_state: st.session_state.active_tab = "Enter Scores"
 if "selected_name" not in st.session_state: st.session_state.selected_name = None
+if "confirm_finish" not in st.session_state: st.session_state.confirm_finish = None
+if "confirm_delete_fixture" not in st.session_state: st.session_state.confirm_delete_fixture = None
+if "confirm_delete_participant" not in st.session_state: st.session_state.confirm_delete_participant = None
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -432,18 +435,71 @@ if show_admin_panel:
                         }
                         db["fixtures"].append(new_fixture); save_db(db); st.success("Match Established!"); st.rerun()
 
+        # --- PENDING MATCHES ---
         st.subheader("⏳ Pending Matches")
-        for f in [f for f in fixtures if f["status"] == "PENDING"]:
+        pending_fixtures = [f for f in fixtures if f["status"] == "PENDING"]
+        if not pending_fixtures:
+            st.info("No pending matches.")
+        for f in pending_fixtures:
             with st.container(border=True):
-                st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
-                cols = st.columns([3, 1, 1, 2])
+                st.markdown(f"**{f['phase']}** | {format_date(f['date'])} @ {format_time(f['time'])}")
+                cols = st.columns([3, 1, 1, 1, 1])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
+
                 with cols[3]:
-                    if st.button("✅ Finish", key=f"fin_{f['id']}", use_container_width=True):
-                        f.update({"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"})
-                        save_db(db); st.rerun()
+                    if st.session_state.confirm_finish == f["id"]:
+                        if st.button("✅ Confirm", key=f"conf_fin_{f['id']}", use_container_width=True, type="primary"):
+                            f.update({"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"})
+                            st.session_state.confirm_finish = None
+                            save_db(db); st.rerun()
+                    else:
+                        if st.button("✅ Finish", key=f"fin_{f['id']}", use_container_width=True):
+                            st.session_state.confirm_finish = f["id"]
+                            st.rerun()
+
+                with cols[4]:
+                    if st.session_state.confirm_delete_fixture == f["id"]:
+                        if st.button("🗑️ Confirm", key=f"conf_del_fix_{f['id']}", use_container_width=True, type="primary"):
+                            db["fixtures"] = [x for x in db["fixtures"] if x["id"] != f["id"]]
+                            db["predictions"] = [x for x in db["predictions"] if x["fixtureId"] != f["id"]]
+                            st.session_state.confirm_delete_fixture = None
+                            save_db(db); st.rerun()
+                    else:
+                        if st.button("🗑️ Delete", key=f"del_fix_{f['id']}", use_container_width=True):
+                            st.session_state.confirm_delete_fixture = f["id"]
+                            st.rerun()
+
+                # Inline warning when a confirmation is pending for this fixture
+                if st.session_state.confirm_finish == f["id"]:
+                    st.warning(f"⚠️ Confirm finishing **{f['teamA']} {val_sa} – {val_sb} {f['teamB']}**? This locks all predictions.")
+                elif st.session_state.confirm_delete_fixture == f["id"]:
+                    st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
+
+        # --- FINISHED MATCHES ---
+        st.divider()
+        st.subheader("✅ Finished Matches")
+        finished_fixtures = [f for f in fixtures if f["status"] == "FINISHED"]
+        if not finished_fixtures:
+            st.info("No finished matches yet.")
+        for f in finished_fixtures:
+            with st.container(border=True):
+                cols = st.columns([4, 1])
+                cols[0].markdown(f"**{f['phase']}** | {format_date(f['date'])} — {get_flag(f['teamA'])} **{f['teamA']}** {f['scoreA']}–{f['scoreB']} **{f['teamB']}** {get_flag(f['teamB'])}")
+                with cols[1]:
+                    if st.session_state.confirm_delete_fixture == f["id"]:
+                        if st.button("🗑️ Confirm", key=f"conf_del_fin_{f['id']}", use_container_width=True, type="primary"):
+                            db["fixtures"] = [x for x in db["fixtures"] if x["id"] != f["id"]]
+                            db["predictions"] = [x for x in db["predictions"] if x["fixtureId"] != f["id"]]
+                            st.session_state.confirm_delete_fixture = None
+                            save_db(db); st.rerun()
+                    else:
+                        if st.button("🗑️ Delete", key=f"del_fin_{f['id']}", use_container_width=True):
+                            st.session_state.confirm_delete_fixture = f["id"]
+                            st.rerun()
+                if st.session_state.confirm_delete_fixture == f["id"]:
+                    st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
 
     elif admin_menu == "👥 Participants":
         st.title("👥 Registry")
@@ -458,11 +514,21 @@ if show_admin_panel:
         for p in participants:
             with st.container(border=True):
                 c_name, c_delete = st.columns([3, 1])
-                c_name.markdown(f"**{p['name']}**")
-                if c_delete.button("🗑️ Del", key=f"del_{p['id']}", use_container_width=True):
-                    db["participants"] = [x for x in db["participants"] if x["id"] != p["id"]]
-                    db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
-                    save_db(db); st.rerun()
+                pred_count = len([x for x in predictions if x["participantId"] == p["id"]])
+                c_name.markdown(f"**{p['name']}** — {pred_count} prediction{'s' if pred_count != 1 else ''} on file")
+                with c_delete:
+                    if st.session_state.confirm_delete_participant == p["id"]:
+                        if st.button("🗑️ Confirm", key=f"conf_del_p_{p['id']}", use_container_width=True, type="primary"):
+                            db["participants"] = [x for x in db["participants"] if x["id"] != p["id"]]
+                            db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
+                            st.session_state.confirm_delete_participant = None
+                            save_db(db); st.rerun()
+                    else:
+                        if st.button("🗑️ Del", key=f"del_{p['id']}", use_container_width=True):
+                            st.session_state.confirm_delete_participant = p["id"]
+                            st.rerun()
+                if st.session_state.confirm_delete_participant == p["id"]:
+                    st.warning(f"⚠️ Confirm removing **{p['name']}**? This will permanently delete them and all {pred_count} of their predictions.")
                     
     elif admin_menu == "📝 Edit Predictions":
         st.title("📝 Edit User Predictions")
@@ -476,41 +542,99 @@ if show_admin_panel:
             if sel_participant_name != "-- Select User --":
                 p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
                 
-                match_options = ["-- Select Match --"] + [f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])})" for f in fixtures]
+                def fixture_label(f):
+                    status_tag = "✅ Final" if f["status"] == "FINISHED" else "⏳ Pending"
+                    return f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])}) [{status_tag}]"
+                
+                match_options = ["-- Select Match --"] + [fixture_label(f) for f in fixtures]
                 sel_fixture_str = st.selectbox("2. Select Match", match_options)
                 
                 if sel_fixture_str != "-- Select Match --":
-                    team_part = sel_fixture_str.split(" (")[0]
-                    tA, tB = team_part.split(" vs ")
-                    f_id = next(f["id"] for f in fixtures if f["teamA"] == tA and f["teamB"] == tB)
-                    
-                    curr_pred = next((p for p in predictions if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
-                    
-                    with st.container(border=True):
-                        st.write(f"### Update: {tA} vs {tB}")
-                        if curr_pred:
-                            st.caption(f"Current prediction on file: **{curr_pred['scoreA']} - {curr_pred['scoreB']}**")
-                        else:
-                            st.caption("No prediction on file yet.")
-                            
-                        c1, c2 = st.columns(2)
-                        new_sa = c1.number_input(f"{tA} Score", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key="ovr_A")
-                        new_sb = c2.number_input(f"{tB} Score", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key="ovr_B")
+                    # Find fixture by reconstructing the label
+                    f_obj = next((f for f in fixtures if fixture_label(f) == sel_fixture_str), None)
+                    if f_obj:
+                        f_id = f_obj["id"]
+                        tA, tB = f_obj["teamA"], f_obj["teamB"]
+                        curr_pred = next((p for p in predictions if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
                         
-                        if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
-                            new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
-                            db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
-                            save_db(db)
-                            st.success(f"Successfully updated prediction for {sel_participant_name}!")
-                            st.rerun()
+                        with st.container(border=True):
+                            st.write(f"### Update: {tA} vs {tB}")
+                            if f_obj["status"] == "FINISHED":
+                                st.caption(f"✅ Final score: **{f_obj['scoreA']} – {f_obj['scoreB']}**")
+                            if curr_pred:
+                                st.caption(f"Current prediction on file: **{curr_pred['scoreA']} - {curr_pred['scoreB']}**")
+                            else:
+                                st.caption("No prediction on file yet.")
+                                
+                            c1, c2 = st.columns(2)
+                            new_sa = c1.number_input(f"{tA} Score", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key="ovr_A")
+                            new_sb = c2.number_input(f"{tB} Score", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key="ovr_B")
+                            
+                            if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
+                                new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
+                                db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
+                                save_db(db)
+                                st.success(f"Successfully updated prediction for {sel_participant_name}!")
+                                st.rerun()
 
     elif admin_menu == "📥 Share & Export":
-        st.title("📸 Database Engine Backup")
-        st.info("Use this tab to download the complete latest JSON structure backup of your tournament ecosystem dataset data tables.")
+        st.title("📥 Share & Export")
+
+        st.subheader("📊 Excel Audit Report")
+        st.caption("Full standings with every participant's predictions and points per match.")
+        if not participants or not fixtures:
+            st.info("No data available to export yet.")
+        else:
+            unified_data = []
+            match_headers_list = []
+            for f in fixtures:
+                is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
+                match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]" if is_finished else f"{f['teamA']} vs {f['teamB']} [Pending]"
+                match_headers_list.append(match_header)
+            for p in participants:
+                total_score, exact_count, outcome_count = 0, 0, 0
+                row_data = {"Participant": p["name"]}
+                match_breakdowns = {}
+                p_preds = [pr for pr in predictions if pr["participantId"] == p["id"]]
+                for idx, f in enumerate(fixtures):
+                    is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
+                    match_header = match_headers_list[idx]
+                    pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
+                    if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
+                        pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
+                        if is_finished:
+                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
+                            if pts == 4: exact_count += 1
+                            if pts >= 3: outcome_count += 1
+                            total_score += pts
+                            match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
+                        else: match_breakdowns[match_header] = pred_str
+                    else: match_breakdowns[match_header] = "---"
+                row_data.update({"Total Points": total_score, "Exact (4pt)": exact_count, "Outcome (3pt)": outcome_count})
+                row_data.update(match_breakdowns)
+                unified_data.append(row_data)
+            df_export = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
+            df_export.insert(0, "Rank", range(1, len(df_export) + 1))
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_export.to_excel(writer, index=False)
+            st.download_button(
+                label="📥 Download Excel Audit (.xlsx)",
+                data=output.getvalue(),
+                file_name="Tournament_Audit_Log.xlsx",
+                mime="application/vnd.ms-excel",
+                use_container_width=True,
+                key="admin_excel_export"
+            )
+
+        st.divider()
+        st.subheader("🗄️ Database Backup")
+        st.caption("Raw JSON backup of all participants, fixtures, and predictions.")
         st.download_button(
             label="📥 Download System Backup (.json)",
             data=json.dumps(db, indent=4),
             file_name="system_data_backup.json",
             mime="application/json",
-            use_container_width=True
+            use_container_width=True,
+            key="admin_json_export"
         )
