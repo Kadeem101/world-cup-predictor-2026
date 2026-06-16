@@ -247,16 +247,16 @@ if not show_admin_panel:
                         else: match_breakdowns[match_header] = pred_str
                     else: match_breakdowns[match_header] = "---"
                 
-                row_data.update({"Total Points": total_score, "Exact (4pt)": exact_count, "Outcome (3pt)": outcome_count})
+                row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)
                 
-            df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
+            df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (1pt)"], ascending=[False, False])
             
             filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
             df_filtered = df_unified.copy()
             if filter_matches:
-                keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
+                keep_cols = ["Participant", "Total Points", "Exact (1pt)", "Outcome (3pt)"] + filter_matches
                 df_filtered = df_filtered[keep_cols]
             
             # Add rank column to the full table
@@ -610,10 +610,10 @@ if show_admin_panel:
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else: match_breakdowns[match_header] = pred_str
                     else: match_breakdowns[match_header] = "---"
-                row_data.update({"Total Points": total_score, "Exact (4pt)": exact_count, "Outcome (3pt)": outcome_count})
+                row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)
-            df_export = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
+            df_export = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (1pt)"], ascending=[False, False])
             df_export.insert(0, "Rank", range(1, len(df_export) + 1))
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
