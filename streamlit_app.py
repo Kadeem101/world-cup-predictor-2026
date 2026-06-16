@@ -274,20 +274,12 @@ if not show_admin_panel:
         st.subheader("Submit Your Scores")
         participant_names = [p["name"] for p in participants]
 
-        # Resolve default index from persisted session state
-        default_idx = 0
-        if st.session_state.selected_name in participant_names:
-            default_idx = participant_names.index(st.session_state.selected_name)
-
         selected_name = st.selectbox(
             "Who are you?",
             options=participant_names,
-            index=default_idx,
+            key="selected_name",
             placeholder="Select your name...",
         )
-
-        # Persist selection immediately
-        st.session_state.selected_name = selected_name
 
         if not selected_name:
             st.info("Please select your name above to unlock your prediction board.")
