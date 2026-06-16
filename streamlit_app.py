@@ -151,11 +151,26 @@ def generate_pdf_summary(name, predictions, fixtures):
             
     return pdf.output(dest='S').encode('latin-1')
 
-# --- START UP ---
+# ==========================================
+#         START UP & GLOBAL DATA
+# ==========================================
 st.set_page_config(layout="wide", page_title="WC2026 Dashboard")
+
+# 1. Load the database ONE time globally.
 db = load_db()
+
+# 2. Extract global state variables so we don't fetch them redundantly 20 times.
+participants = db.get("participants", [])
+fixtures = db.get("fixtures", [])
+predictions = db.get("predictions", [])
+
+# 3. Handle global timezone and dates
+ast_tz = timezone(timedelta(hours=-4))
+today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
+
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 if "active_tab" not in st.session_state: st.session_state.active_tab = "Enter Scores"
+if "selected_name" not in st.session_state: st.session_state.selected_name = None
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -182,70 +197,20 @@ with st.sidebar:
 #         MAIN VIEW (USER INTERFACE)
 # ==========================================
 if not show_admin_panel:
-    col1, col2, col3, col4 = st.columns(4, gap="small")
+    col1, col2, col3 = st.columns(3, gap="small")
     if col1.button("📝 Enter Scores", use_container_width=True, type="primary" if st.session_state.active_tab == "Enter Scores" else "secondary"):
         st.session_state.active_tab = "Enter Scores"; st.rerun()
     if col2.button("🏆 View Standings", use_container_width=True, type="primary" if st.session_state.active_tab == "View Standings" else "secondary"):
         st.session_state.active_tab = "View Standings"; st.rerun()
-    if col3.button("📅 Upcoming Matches", use_container_width=True, type="primary" if st.session_state.active_tab == "Upcoming Matches" else "secondary"):
-        st.session_state.active_tab = "Upcoming Matches"; st.rerun()
-    if col4.button("📜 Rules", use_container_width=True, type="primary" if st.session_state.active_tab == "Rules" else "secondary"):
+    if col3.button("📜 Rules", use_container_width=True, type="primary" if st.session_state.active_tab == "Rules" else "secondary"):
         st.session_state.active_tab = "Rules"; st.rerun()
 
     st.markdown("---")
 
     # -----------------------------------
-    # VIEW: UPCOMING MATCHES
+    # VIEW: View Standings & PERFORMANCE MATRIX
     # -----------------------------------
-    if st.session_state.active_tab == "Upcoming Matches":
-        st.subheader("Match Schedule")
-        
-        fixtures = db.get("fixtures", [])
-        tab_pending, tab_finished = st.tabs(["⏳ Upcoming", "🟢 Finished"])
-        
-        with tab_pending:
-            pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED"]
-            
-            if not pending_fixtures: 
-                st.info("No upcoming matches scheduled.")
-            else:
-                # Using AST (UTC-4) for accurate local "Today" calculation
-                ast_tz = timezone(timedelta(hours=-4))
-                today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
-                
-                for f in pending_fixtures:
-                    with st.container(border=True):
-                        phase_text = f.get('phase', 'Group Stage')
-                        time_text = format_time(f.get('time', ''))
-                        
-                        # Logic to check if the match date is 'Today' locally
-                        if f.get('date') == today_str:
-                            date_text = "🚨 :red[**TODAY**]"
-                        else:
-                            date_text = format_date(f.get('date', ''))
-                            
-                        st.caption(f"**{phase_text}** | {date_text} @ {time_text}")
-                        st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
-                        
-        with tab_finished:
-            finished_fixtures = [f for f in fixtures if f.get("status") == "FINISHED"]
-            if not finished_fixtures: 
-                st.info("No matches have concluded yet.")
-            else:
-                for f in finished_fixtures:
-                    with st.container(border=True):
-                        st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))}")
-                        res = f"{f.get('scoreA', 'N/A')}-{f.get('scoreB', 'N/A')}"
-                        st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** {res} **{f['teamB']}** {get_flag(f['teamB'])}")
-
-    # -----------------------------------
-    # VIEW: View Standings & PERFORMANCE MATRIX (MERGED)
-    # -----------------------------------
-    elif st.session_state.active_tab == "View Standings":
-        participants = db.get("participants", [])
-        fixtures = db.get("fixtures", [])
-        predictions = db.get("predictions", [])
-        
+    if st.session_state.active_tab == "View Standings":
         if not participants or not fixtures:
             st.info("Data will populate once matches and participants are configured.")
         else:
@@ -285,101 +250,77 @@ if not show_admin_panel:
                 
             df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (4pt)"], ascending=[False, False])
             
-            # Leaderboard view with fixed numbering ranks
-            df_leaderboard = df_unified[["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"]].copy()
-            df_leaderboard.insert(0, "Rank", range(1, len(df_leaderboard) + 1))
+            filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
+            df_filtered = df_unified.copy()
+            if filter_matches:
+                keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
+                df_filtered = df_filtered[keep_cols]
             
-            st.dataframe(df_leaderboard, use_container_width=True, hide_index=True)
-
-            # Export Excel Log
+            # Add rank column to the full table
+            df_filtered.insert(0, "Rank", range(1, len(df_filtered) + 1))
+            st.dataframe(df_filtered, use_container_width=True, hide_index=True,
+                         column_config={"Participant": st.column_config.Column(pinned=True),
+                                        "Rank": st.column_config.Column(pinned=True)})
+            
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_unified.to_excel(writer, index=False)
             st.download_button("📥 Download Excel Audit (.xlsx)", data=output.getvalue(), file_name="Tournament_Audit_Log.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
 
-            st.markdown("---")
-            
-            # Incorporated individual details lookup
-            st.subheader("🔍 View Participant Predictions")
-            selected_p_name = st.selectbox("Select a participant to view their full prediction list:", options=[p["name"] for p in participants])
-            target_row = next((row for row in unified_data if row["Participant"] == selected_p_name), None)
-            
-            if target_row:
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Total Pts", target_row["Total Points"])
-                    c2.metric("Exact Scores", target_row["Exact (4pt)"])
-                    c3.metric("Correct Outcomes", target_row["Outcome (3pt)"])
-                    st.divider()
-                    
-                    # ADDED FILTERING LOGIC HERE
-                    search_preds = st.text_input("🔍 Filter matches by team...", key="search_preds").lower()
-                    filtered_headers = [m for m in match_headers_list if search_preds in m.lower()]
-                    
-                    if filtered_headers:
-                        for m_header in filtered_headers:
-                            st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
-                    else:
-                        st.info("No matches found matching your filter.")
-            
-            st.markdown("---")
-            
-            # Incorporated global matrix expander
-            with st.expander("📊 View Full Details (All Players vs All Matches)"):
-                filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
-                df_filtered = df_unified.copy()
-                if filter_matches:
-                    keep_cols = ["Participant", "Total Points", "Exact (4pt)", "Outcome (3pt)"] + filter_matches
-                    df_filtered = df_filtered[keep_cols]
-                st.dataframe(df_filtered, use_container_width=True, hide_index=True)
-
     # -----------------------------------
-    # VIEW: ENTER / SUBMIT SCORES & USER PDF SHEET
+    # VIEW: ENTER / SUBMIT SCORES
     # -----------------------------------
     elif st.session_state.active_tab == "Enter Scores":
         st.subheader("Submit Your Scores")
-        participants = db.get("participants", [])
-        participant_names = ["Select your name..."] + [p["name"] for p in participants]
-        selected_name = st.selectbox("Who are you?", participant_names)
-        
-        if selected_name == "Select your name...":
+        participant_names = [p["name"] for p in participants]
+
+        # Resolve default index from persisted session state
+        default_idx = 0
+        if st.session_state.selected_name in participant_names:
+            default_idx = participant_names.index(st.session_state.selected_name)
+
+        selected_name = st.selectbox(
+            "Who are you?",
+            options=participant_names,
+            index=default_idx,
+            placeholder="Select your name...",
+        )
+
+        # Persist selection immediately
+        st.session_state.selected_name = selected_name
+
+        if not selected_name:
             st.info("Please select your name above to unlock your prediction board.")
         else:
             participant = next((p for p in participants if p["name"] == selected_name), None)
             if participant:
                 part_id = participant["id"]
-                fixtures = db.get("fixtures", [])
-                preds = db.get("predictions", [])
-                
-                # Using AST (UTC-4) for accurate local "Today" calculation
-                ast_tz = timezone(timedelta(hours=-4))
-                today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
-                
-                def get_existing_pred(fid): return next((p for p in preds if p["participantId"] == part_id and p["fixtureId"] == fid), None)
+                def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
-                # Generate and offer personal summary sheet PDF export
-                user_preds = [p for p in preds if p["participantId"] == part_id]
-                if user_preds:
-                    pdf_data = generate_pdf_summary(selected_name, user_preds, fixtures)
-                    st.download_button(
-                        label="📥 Download Your Scores (PDF)",
-                        data=pdf_data,
-                        file_name=f"Predictions_{selected_name}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                    st.write("")
+                # Progress indicator
+                total_fixtures = len(fixtures)
+                predicted_count = sum(1 for f in fixtures if get_existing_pred(f["id"]) is not None)
+                pending_count = len([f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None])
+                progress_pct = predicted_count / total_fixtures if total_fixtures > 0 else 0
 
-                tab_pending, tab_locked = st.tabs(["⏳ Pending Matchups", "🟢 Locked Matchups"])
+                prog_col, stat_col = st.columns([3, 1])
+                with prog_col:
+                    st.progress(progress_pct, text=f"**{predicted_count} of {total_fixtures}** matches predicted")
+                with stat_col:
+                    if pending_count > 0:
+                        st.warning(f"⚠️ {pending_count} still open", icon=None)
+                    else:
+                        st.success("✅ All done!")
+                st.write("")
+
+                tab_pending, tab_schedule = st.tabs(["⏳ Pending Matchups", "📅 Full Schedule"])
                 
                 with tab_pending:
-                    # UPDATED: Only show pending matches if they haven't been predicted by the user yet
                     pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None]
                     if not pending_fixtures: st.info("No upcoming matches to predict.")
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
-                            # Logic for "TODAY" display locally
                             if f.get('date') == today_str:
                                 date_text = "🚨 :red[**TODAY**]"
                             else:
@@ -388,15 +329,12 @@ if not show_admin_panel:
                             with st.container(border=True):
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
                                 
-                                # Row 1: The Inputs
                                 cols = st.columns([3, 1, 1])
                                 cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                                 vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
                                 vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
                                 
-                                # Row 2: Two-Step Confirmation logic
                                 conf_cols = st.columns([2, 1])
-                                # Included abbreviated names (first 3 letters) in the confirmation string
                                 label_text = f"Confirm: **{f['teamA'][:3].upper()} {vA} - {vB} {f['teamB'][:3].upper()}**"
                                 confirm_check = conf_cols[0].checkbox(label_text, key=f"chk_{f['id']}")
                                 
@@ -407,51 +345,66 @@ if not show_admin_panel:
                                     st.toast(f"🎉 Prediction saved for {f['teamA']} vs {f['teamB']}!", icon="✅")
                                     st.rerun()
 
-                with tab_locked:
-                    # USERS CAN ONLY VIEW - NO EDITING TO PREVENT CHEATING
-                    locked_fixtures = [f for f in fixtures if f.get("status") == "FINISHED" or get_existing_pred(f["id"]) is not None]
-                    if locked_fixtures:
-                        # ADDED FILTERING LOGIC HERE
-                        search_locked = st.text_input("🔍 Filter matches by team...", key="search_locked").lower()
-                        filtered_locked = [f for f in locked_fixtures if search_locked in f['teamA'].lower() or search_locked in f['teamB'].lower()]
-                        
-                        if filtered_locked:
-                            for f in filtered_locked:
-                                curr_pred = get_existing_pred(f["id"])
-                                res = f"{curr_pred['scoreA']}-{curr_pred['scoreB']}" if curr_pred else "No prediction submitted"
-                                st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])} | Your Selection: **{res}**")
-                        else:
-                            st.info("No matches found matching your filter.")
-                    else: st.info("No locked matches yet.")
+                    user_preds = [p for p in predictions if p["participantId"] == part_id]
+                    if user_preds:
+                        st.divider()
+                        pdf_data = generate_pdf_summary(selected_name, user_preds, fixtures)
+                        st.download_button(
+                            label="📥 Download Your Predictions (PDF)",
+                            data=pdf_data,
+                            file_name=f"Predictions_{selected_name}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="pdf_download_pending"
+                        )
+
+                with tab_schedule:
+                    search_sched = st.text_input("🔍 Filter by team...", key="search_schedule").lower()
+                    all_sorted = sorted(fixtures, key=lambda f: (f.get("date", ""), f.get("time", "")))
+                    filtered_sched = [f for f in all_sorted if search_sched in f['teamA'].lower() or search_sched in f['teamB'].lower()] if search_sched else all_sorted
+                    if not filtered_sched:
+                        st.info("No matches found.")
+                    else:
+                        with st.container(height=450, border=False):
+                            for f in filtered_sched:
+                                with st.container(border=True):
+                                    status = f.get("status", "PENDING")
+                                    if status == "FINISHED":
+                                        res = f"{f.get('scoreA', '?')}-{f.get('scoreB', '?')}"
+                                        curr_pred = get_existing_pred(f["id"])
+                                        my_pred = f"| Your Pick: **{curr_pred['scoreA']}-{curr_pred['scoreB']}**" if curr_pred else "| No prediction"
+                                        st.caption(f"**{f.get('phase', 'Group Stage')}** | {format_date(f.get('date', ''))} ✅ Final")
+                                        st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** {res} **{f['teamB']}** {get_flag(f['teamB'])} {my_pred}")
+                                    else:
+                                        date_text = "🚨 :red[**TODAY**]" if f.get('date') == today_str else format_date(f.get('date', ''))
+                                        curr_pred = get_existing_pred(f["id"])
+                                        my_pred = f"| Your Pick: **{curr_pred['scoreA']}-{curr_pred['scoreB']}**" if curr_pred else "| ⏳ Awaiting prediction"
+                                        st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
+                                        st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])} {my_pred}")
+
+
 
     # -----------------------------------
-    # VIEW: TOURNAMENT RULES & WA SHARING
+    # VIEW: TOURNAMENT RULES 
     # -----------------------------------
     elif st.session_state.active_tab == "Rules":
         with st.container(border=True):
             st.markdown("### How to Play")
             st.markdown("- **3 Points:** For correctly predicting the right result (Win/Draw).")
             st.markdown("- **Bonus Point:** +1 bonus point for correctly predicting the exact score.")
-            
             st.divider()
-            
             st.markdown("### Instructions")
             st.markdown("1. **Submit:** Enter your predictions and click \"Save\".")
             st.markdown("2. **Download:** You can now download your scores in the 'Enter Scores' section.")
             st.markdown("3. **Track:** Check the 'View Standings' tab to see how you rank against others.")
-            
             st.divider()
-            
             st.markdown("### Cost")
             st.markdown("**$10 per game** (Pay Kevon).")
-            
             st.divider()
-            
             st.markdown("### Prize Distribution")
             st.markdown("- **1st Place:** 50% of the total funds collected.")
             st.markdown("- **2nd Place:** 30% of the total funds collected.")
             st.markdown("- **3rd Place:** 20% of the total funds collected.")
-            
             st.divider()
 
 # ==========================================
@@ -487,14 +440,12 @@ if show_admin_panel:
                         }
                         db["fixtures"].append(new_fixture); save_db(db); st.success("Match Established!"); st.rerun()
 
-        fixtures = db.get("fixtures", [])
         st.subheader("⏳ Pending Matches")
         for f in [f for f in fixtures if f["status"] == "PENDING"]:
             with st.container(border=True):
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
                 cols = st.columns([3, 1, 1, 2])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
-                # UPDATED: Set labels to team names and removed label_visibility="collapsed" to show them above the inputs
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
                 with cols[3]:
@@ -512,7 +463,7 @@ if show_admin_panel:
                     save_db(db); st.success(f"Enrolled!"); st.rerun()
         
         st.subheader("Current Roster")
-        for p in db.get("participants", []):
+        for p in participants:
             with st.container(border=True):
                 c_name, c_delete = st.columns([3, 1])
                 c_name.markdown(f"**{p['name']}**")
@@ -525,10 +476,6 @@ if show_admin_panel:
         st.title("📝 Edit User Predictions")
         st.info("Use this tool to securely override a user's prediction if they made an error. Users cannot edit their own scores once saved.")
         
-        participants = db.get("participants", [])
-        fixtures = db.get("fixtures", [])
-        preds = db.get("predictions", [])
-        
         if not participants or not fixtures:
             st.warning("You need active participants and fixtures to use this tool.")
         else:
@@ -537,18 +484,15 @@ if show_admin_panel:
             if sel_participant_name != "-- Select User --":
                 p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
                 
-                # Create a list of matches (formatting them so they look nice in the dropdown)
                 match_options = ["-- Select Match --"] + [f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])})" for f in fixtures]
                 sel_fixture_str = st.selectbox("2. Select Match", match_options)
                 
                 if sel_fixture_str != "-- Select Match --":
-                    # Extract the teams out of the string to find the exact fixture ID
                     team_part = sel_fixture_str.split(" (")[0]
                     tA, tB = team_part.split(" vs ")
                     f_id = next(f["id"] for f in fixtures if f["teamA"] == tA and f["teamB"] == tB)
                     
-                    # Look up their current prediction if it exists
-                    curr_pred = next((p for p in preds if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
+                    curr_pred = next((p for p in predictions if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
                     
                     with st.container(border=True):
                         st.write(f"### Update: {tA} vs {tB}")
@@ -563,7 +507,6 @@ if show_admin_panel:
                         
                         if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
                             new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
-                            # Filter out the old prediction and append the overridden one
                             db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
                             save_db(db)
                             st.success(f"Successfully updated prediction for {sel_participant_name}!")
