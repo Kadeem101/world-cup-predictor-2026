@@ -311,8 +311,16 @@ if not show_admin_panel:
                     c2.metric("Exact Scores", target_row["Exact (4pt)"])
                     c3.metric("Correct Outcomes", target_row["Outcome (3pt)"])
                     st.divider()
-                    for m_header in match_headers_list:
-                        st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
+                    
+                    # ADDED FILTERING LOGIC HERE
+                    search_preds = st.text_input("🔍 Filter matches by team...", key="search_preds").lower()
+                    filtered_headers = [m for m in match_headers_list if search_preds in m.lower()]
+                    
+                    if filtered_headers:
+                        for m_header in filtered_headers:
+                            st.markdown(f"**{m_header}**: `{target_row[m_header]}`")
+                    else:
+                        st.info("No matches found matching your filter.")
             
             st.markdown("---")
             
@@ -403,10 +411,17 @@ if not show_admin_panel:
                     # USERS CAN ONLY VIEW - NO EDITING TO PREVENT CHEATING
                     locked_fixtures = [f for f in fixtures if f.get("status") == "FINISHED" or get_existing_pred(f["id"]) is not None]
                     if locked_fixtures:
-                        for f in locked_fixtures:
-                            curr_pred = get_existing_pred(f["id"])
-                            res = f"{curr_pred['scoreA']}-{curr_pred['scoreB']}" if curr_pred else "No prediction submitted"
-                            st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])} | Your Selection: **{res}**")
+                        # ADDED FILTERING LOGIC HERE
+                        search_locked = st.text_input("🔍 Filter matches by team...", key="search_locked").lower()
+                        filtered_locked = [f for f in locked_fixtures if search_locked in f['teamA'].lower() or search_locked in f['teamB'].lower()]
+                        
+                        if filtered_locked:
+                            for f in filtered_locked:
+                                curr_pred = get_existing_pred(f["id"])
+                                res = f"{curr_pred['scoreA']}-{curr_pred['scoreB']}" if curr_pred else "No prediction submitted"
+                                st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])} | Your Selection: **{res}**")
+                        else:
+                            st.info("No matches found matching your filter.")
                     else: st.info("No locked matches yet.")
 
     # -----------------------------------
@@ -479,6 +494,7 @@ if show_admin_panel:
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])}")
                 cols = st.columns([3, 1, 1, 2])
                 cols[0].markdown(f"**{get_flag(f['teamA'])} {f['teamA']} vs {f['teamB']} {get_flag(f['teamB'])}**")
+                # UPDATED: Set labels to team names and removed label_visibility="collapsed" to show them above the inputs
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
                 with cols[3]:
@@ -521,14 +537,17 @@ if show_admin_panel:
             if sel_participant_name != "-- Select User --":
                 p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
                 
+                # Create a list of matches (formatting them so they look nice in the dropdown)
                 match_options = ["-- Select Match --"] + [f"{f['teamA']} vs {f['teamB']} ({format_date(f['date'])})" for f in fixtures]
                 sel_fixture_str = st.selectbox("2. Select Match", match_options)
                 
                 if sel_fixture_str != "-- Select Match --":
+                    # Extract the teams out of the string to find the exact fixture ID
                     team_part = sel_fixture_str.split(" (")[0]
                     tA, tB = team_part.split(" vs ")
                     f_id = next(f["id"] for f in fixtures if f["teamA"] == tA and f["teamB"] == tB)
                     
+                    # Look up their current prediction if it exists
                     curr_pred = next((p for p in preds if p["participantId"] == p_id and p["fixtureId"] == f_id), None)
                     
                     with st.container(border=True):
@@ -544,6 +563,7 @@ if show_admin_panel:
                         
                         if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
                             new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
+                            # Filter out the old prediction and append the overridden one
                             db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
                             save_db(db)
                             st.success(f"Successfully updated prediction for {sel_participant_name}!")
