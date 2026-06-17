@@ -86,7 +86,7 @@ def load_db():
         db = client[st.secrets["mongodb"]["db_name"]]
         return {
             "participants": list(db.participants.find({}, {"_id": 0})),
-            "fixtures": list(db.fixtures.find({}, {"_id": 0})),
+            "fixtures": list(db.fixtures.find({}, {"_id": 0}).sort([("date", 1), ("time", 1)])),
             "predictions": list(db.predictions.find({}, {"_id": 0})),
             "teams": TEAMS
         }
