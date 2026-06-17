@@ -308,7 +308,7 @@ if not show_admin_panel:
                         st.success("✅ All done for now!")
                 st.write("")
 
-                tab_pending, tab_schedule = st.tabs(["⏳ Pending Matchups", "📅 Full Schedule"])
+                tab_pending, tab_schedule = st.tabs(["⏳ Pending Predictions", "📅 Full Schedule"])
                 
                 with tab_pending:
                     pending_fixtures = [f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None]
