@@ -174,6 +174,7 @@ if "selected_name" not in st.session_state: st.session_state.selected_name = Non
 if "confirm_finish" not in st.session_state: st.session_state.confirm_finish = None
 if "confirm_delete_fixture" not in st.session_state: st.session_state.confirm_delete_fixture = None
 if "confirm_delete_participant" not in st.session_state: st.session_state.confirm_delete_participant = None
+if "staged_pred" not in st.session_state: st.session_state.staged_pred = {}
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -316,29 +317,49 @@ if not show_admin_panel:
                     else:
                         for f in pending_fixtures:
                             curr_pred = get_existing_pred(f["id"])
-                            if f.get('date') == today_str:
-                                date_text = "🚨 :red[**TODAY**]"
-                            else:
-                                date_text = format_date(f.get('date', ''))
-                            
+                            date_text = "🚨 :red[**TODAY**]" if f.get('date') == today_str else format_date(f.get('date', ''))
+
                             with st.container(border=True):
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
-                                
-                                cols = st.columns([3, 1, 1])
-                                cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
-                                vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
-                                vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
-                                
-                                conf_cols = st.columns([2, 1])
-                                label_text = f"Confirm: **{f['teamA'][:3].upper()} {vA} - {vB} {f['teamB'][:3].upper()}**"
-                                confirm_check = conf_cols[0].checkbox(label_text, key=f"chk_{f['id']}")
-                                
-                                if conf_cols[1].button("Save", key=f"btn_{f['id']}", disabled=not confirm_check, use_container_width=True, type="primary"):
-                                    new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": vA, "scoreB": vB}
-                                    db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
-                                    save_db(db)
-                                    st.toast(f"🎉 Prediction saved for {f['teamA']} vs {f['teamB']}!", icon="✅")
-                                    st.rerun()
+
+                                if f["id"] in st.session_state.staged_pred:
+                                    # ── REVIEW MODE ──────────────────────────────────
+                                    sA, sB = st.session_state.staged_pred[f["id"]]
+
+                                    if sA > sB:   outcome = f"🏆 {f['teamA']} Win"
+                                    elif sB > sA: outcome = f"🏆 {f['teamB']} Win"
+                                    else:         outcome = "🤝 Draw"
+
+                                    st.markdown(
+                                        f"### {get_flag(f['teamA'])} {f['teamA']} &nbsp; **{sA} — {sB}** &nbsp; {f['teamB']} {get_flag(f['teamB'])}"
+                                    )
+                                    st.caption(f"Predicted result: {outcome}")
+
+                                    if sA == 0 and sB == 0:
+                                        st.warning("⚠️ You're predicting a **0 – 0 draw** — is that intentional?")
+
+                                    rev_cols = st.columns(2)
+                                    if rev_cols[0].button("✏️ Edit", key=f"edit_{f['id']}", use_container_width=True):
+                                        del st.session_state.staged_pred[f["id"]]
+                                        st.rerun()
+                                    if rev_cols[1].button("✅ Confirm & Save", key=f"confirm_{f['id']}", use_container_width=True, type="primary"):
+                                        new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": sA, "scoreB": sB}
+                                        db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
+                                        del st.session_state.staged_pred[f["id"]]
+                                        save_db(db)
+                                        st.toast(f"🎉 Prediction saved for {f['teamA']} vs {f['teamB']}!", icon="✅")
+                                        st.rerun()
+
+                                else:
+                                    # ── ENTRY MODE ───────────────────────────────────
+                                    cols = st.columns([3, 1, 1])
+                                    cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
+                                    vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
+                                    vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
+
+                                    if st.button("👁️ Preview Prediction", key=f"btn_{f['id']}", use_container_width=True):
+                                        st.session_state.staged_pred[f["id"]] = (vA, vB)
+                                        st.rerun()
 
                     user_preds = [p for p in predictions if p["participantId"] == part_id]
                     if user_preds:
