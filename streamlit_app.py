@@ -109,6 +109,14 @@ def save_db(data):
 
 def get_flag(team): return FLAGS.get(team, "⚽")
 
+def flag_img_html(team, size="48x36"):
+    """Returns an <img> tag for the team flag at the requested size, or a fallback emoji span."""
+    md = FLAGS.get(team, "")
+    if "(https://" in md:
+        url = md.split("(")[1].rstrip(")").replace("16x12", size)
+        return f'<img src="{url}" width="48" height="36" style="border-radius:3px;object-fit:cover;vertical-align:middle">'
+    return '<span style="font-size:1.6rem;vertical-align:middle">⚽</span>'
+
 def format_date(date_str):
     try: return datetime.strptime(date_str, "%Y-%m-%d").strftime("%a. %d %B")
     except: return date_str
@@ -330,9 +338,21 @@ if not show_admin_panel:
                                     elif sB > sA: outcome = f"🏆 {f['teamB']} Win"
                                     else:         outcome = "🤝 Draw"
 
-                                    st.markdown(
-                                        f"### {get_flag(f['teamA'])} {f['teamA']} &nbsp; **{sA} — {sB}** &nbsp; {f['teamB']} {get_flag(f['teamB'])}"
-                                    )
+                                    st.markdown(f"""
+<div style="padding:4px 0 8px 0">
+    <div style="display:flex;align-items:center;padding:10px 4px;border-bottom:1px solid rgba(128,128,128,0.25)">
+        {flag_img_html(f['teamA'])}
+        <span style="flex:1;font-size:1.05rem;font-weight:600;margin-left:12px">{f['teamA']}</span>
+        <span style="font-size:2rem;font-weight:800;min-width:32px;text-align:right">{sA}</span>
+    </div>
+    <div style="display:flex;align-items:center;padding:10px 4px">
+        {flag_img_html(f['teamB'])}
+        <span style="flex:1;font-size:1.05rem;font-weight:600;margin-left:12px">{f['teamB']}</span>
+        <span style="font-size:2rem;font-weight:800;min-width:32px;text-align:right">{sB}</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
                                     st.caption(f"Predicted result: {outcome}")
 
                                     if sA == 0 and sB == 0:
