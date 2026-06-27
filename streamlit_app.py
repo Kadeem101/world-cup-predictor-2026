@@ -504,7 +504,7 @@ if not show_admin_panel:
                     with st.container(border=True):
                         if not existing_pin:
                             st.markdown("### 🔓 Create Your PIN")
-                            st.caption("Create a 4-digit PIN only you know to protect your scores.")
+                            st.caption("No PIN set. Create a private 4-digit PIN to protect your scores.")
                             new_pin_a = st.text_input("Choose a 4-digit PIN:", type="password", max_chars=4, key="pin_create_a")
                             new_pin_b = st.text_input("Confirm your PIN:", type="password", max_chars=4, key="pin_create_b")
                             if st.button("🔐 Set PIN & Unlock", use_container_width=True, type="primary"):
