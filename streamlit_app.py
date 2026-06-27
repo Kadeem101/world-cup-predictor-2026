@@ -201,10 +201,12 @@ if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
             st.session_state.verified_participant_id = _qpid
             st.session_state.selected_name = _qpart["name"]
             
-            # If they logged in via a shared URL link, save it to their cookies for next time
+            # Save it to their cookies with a 1-year lifespan (31,536,000 seconds)
             if not cookie_controller.get("wc2026_pid"):
-                cookie_controller.set("wc2026_pid", _qpid)
-                cookie_controller.set("wc2026_tok", _qtok)
+                cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
+                cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
+            
+            st.rerun() # Instantly refreshes the UI the millisecond cookies are found
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -365,8 +367,8 @@ if not show_admin_panel:
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
-                                    cookie_controller.set("wc2026_pid", part_id)
-                                    cookie_controller.set("wc2026_tok", auth_token)
+                                    cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
+                                    cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
                                     
                                     st.rerun()
                         else:
@@ -380,8 +382,8 @@ if not show_admin_panel:
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
-                                    cookie_controller.set("wc2026_pid", part_id)
-                                    cookie_controller.set("wc2026_tok", auth_token)
+                                    cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
+                                    cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
                                     
                                     st.rerun()
                                 else:
