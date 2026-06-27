@@ -206,7 +206,7 @@ if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
                 cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
                 cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
             
-            st.rerun() # Instantly refreshes the UI the millisecond cookies are found
+            # st.rerun() # Instantly refreshes the UI the millisecond cookies are found
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -339,10 +339,13 @@ if not show_admin_panel:
             if participant:
                 part_id = participant["id"]
 
-                # --- PIN VERIFICATION GATE ---
+# --- PIN VERIFICATION GATE ---
                 if st.session_state.verified_participant_id != part_id:
                     st.session_state.verified_participant_id = None
                     existing_pin = str(participant.get("pin", "")).strip()
+
+                    # 1. ADD FLAG: Track if they just authenticated successfully
+                    just_unlocked = False 
 
                     with st.container(border=True):
                         if not existing_pin:
@@ -370,10 +373,10 @@ if not show_admin_panel:
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
                                     
-                                    st.rerun()
+                                    # 2. UPDATE FLAG INSTEAD OF RERUN
+                                    just_unlocked = True 
                         else:
                             st.markdown("### 🔒 Enter Your PIN")
-                            # st.caption("Contact the admin if you've forgotten your PIN and need it reset.")
                             pin_input = st.text_input("4-digit PIN:", type="password", max_chars=4, key="pin_input")
                             if st.button("🔓 Unlock My Predictions", use_container_width=True, type="primary"):
                                 if pin_input.strip() == existing_pin:
@@ -385,10 +388,14 @@ if not show_admin_panel:
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
                                     
-                                    st.rerun()
+                                    # 3. UPDATE FLAG INSTEAD OF RERUN
+                                    just_unlocked = True 
                                 else:
                                     st.error("❌ Incorrect PIN. Please try again.")
-                    st.stop()
+                    
+                    # 4. ONLY STOP THE SCRIPT IF THEY DID NOT JUST UNLOCK
+                    if not just_unlocked:
+                        st.stop()
 
                 def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
