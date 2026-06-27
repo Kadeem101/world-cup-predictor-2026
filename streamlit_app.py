@@ -404,7 +404,7 @@ if not show_admin_panel:
             # Searchable Multi-Select UI
             # -----------------------------
             selected_matches = st.multiselect(
-                "🔍 Search and select matches to view (showing the 10 most recent/upcoming by default):",
+                "🔍 Search and select matches to view (showing the 10 most recent/upcoming games by default):",
                 options=match_headers_list,
                 default=default_matches,
                 placeholder="Type a team name to add a match..."
