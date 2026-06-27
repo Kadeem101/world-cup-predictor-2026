@@ -1,10 +1,12 @@
 import streamlit as st
 import json
+import hashlib
 import pymongo
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from fpdf import FPDF
+from streamlit_cookies_controller import CookieController
 
 # --- CUSTOM CSS FOR POLISHED INTERFACE ---
 st.markdown("""
@@ -125,6 +127,10 @@ def format_time(time_str):
     try: return datetime.strptime(time_str[:5], "%H:%M").strftime("%I:%M %p")
     except: return time_str
 
+def make_auth_token(part_id, pin):
+    """Short verification token derived from participant ID + PIN."""
+    return hashlib.sha256(f"{part_id}:{pin}:wc2026".encode()).hexdigest()[:20]
+
 def compute_points(pred_A, pred_B, act_A, act_B):
     if act_A is None or act_B is None or pred_A is None or pred_B is None: return 0
     pA, pB, aA, aB = int(pred_A), int(pred_B), int(act_A), int(act_B)
@@ -179,6 +185,26 @@ if "confirm_finish" not in st.session_state: st.session_state.confirm_finish = N
 if "confirm_delete_fixture" not in st.session_state: st.session_state.confirm_delete_fixture = None
 if "confirm_delete_participant" not in st.session_state: st.session_state.confirm_delete_participant = None
 if "staged_pred" not in st.session_state: st.session_state.staged_pred = {}
+if "verified_participant_id" not in st.session_state: st.session_state.verified_participant_id = None
+
+cookie_controller = CookieController()
+
+# --- AUTO-LOGIN FROM COOKIES & QUERY PARAMS ---
+_qpid = st.query_params.get("pid", "") or cookie_controller.get("wc2026_pid")
+_qtok = st.query_params.get("tok", "") or cookie_controller.get("wc2026_tok")
+
+if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
+    _qpart = next((p for p in participants if p["id"] == _qpid), None)
+    if _qpart:
+        _qpin = str(_qpart.get("pin", "")).strip()
+        if _qpin and _qtok == make_auth_token(_qpid, _qpin):
+            st.session_state.verified_participant_id = _qpid
+            st.session_state.selected_name = _qpart["name"]
+            
+            # If they logged in via a shared URL link, save it to their cookies for next time
+            if not cookie_controller.get("wc2026_pid"):
+                cookie_controller.set("wc2026_pid", _qpid)
+                cookie_controller.set("wc2026_tok", _qtok)
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -240,7 +266,6 @@ if not show_admin_panel:
                     is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                     match_header = match_headers_list[idx]
                     
-                    # Logic to hide/show predictions based on total participation per match
                     fixture_all_entered = (len(participants) > 0) and sum(1 for pr in predictions if pr["fixtureId"] == f["id"]) == len(participants)
                     
                     pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
@@ -254,11 +279,9 @@ if not show_admin_panel:
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
-                            # Show "Score Entered" placeholder if not everyone has entered their scores yet
-                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Entered"
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else:
-                        # Show "Pending" placeholder if they haven't entered their scores
-                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "Awaiting Score"
+                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
                 
                 row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
@@ -273,23 +296,20 @@ if not show_admin_panel:
                 df_filtered = df_filtered[keep_cols]
             
             df_filtered.insert(0, "Rank", range(1, len(df_filtered) + 1))
-            # --- DEFINE STYLING FUNCTION ---
             def color_status(val):
-                if val == "Score Entered":
-                    return 'color: #2ecc71' # Light Green
-                elif val == "Awaiting Score":
-                    return 'color: #FF8C4A' # Light Red
+                if val == "Score Submitted":
+                    return 'color: #2ecc71'
+                elif val == "No Score Yet":
+                    return 'color: #FF8C4A'
                 return ''
 
-            # --- APPLY STYLING AND RENDER ---
-            # Using .map() (replaces deprecated applymap)
             styled_df = df_filtered.style.map(color_status)
             
             st.dataframe(styled_df, use_container_width=True, hide_index=True,
                          column_config={"Participant": st.column_config.Column(pinned=True),
                                         "Rank": st.column_config.Column(pinned=True)})
             
-            st.info("💡 **Note:** Specific predictions for participants are hidden until everyone has submitted their scores for that match.")
+            st.info("💡 **Note:** You'll only see other players' predictions once everyone has submitted their scores.")
             
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -316,6 +336,58 @@ if not show_admin_panel:
             participant = next((p for p in participants if p["name"] == selected_name), None)
             if participant:
                 part_id = participant["id"]
+
+                # --- PIN VERIFICATION GATE ---
+                if st.session_state.verified_participant_id != part_id:
+                    st.session_state.verified_participant_id = None
+                    existing_pin = str(participant.get("pin", "")).strip()
+
+                    with st.container(border=True):
+                        if not existing_pin:
+                            st.markdown("### 🔓 Create Your PIN")
+                            st.caption("Create a 4-digit PIN only you know to protect your scores.")
+                            new_pin_a = st.text_input("Choose a 4-digit PIN:", type="password", max_chars=4, key="pin_create_a")
+                            new_pin_b = st.text_input("Confirm your PIN:", type="password", max_chars=4, key="pin_create_b")
+                            if st.button("🔐 Set PIN & Unlock", use_container_width=True, type="primary"):
+                                if not new_pin_a.strip().isdigit() or len(new_pin_a.strip()) != 4:
+                                    st.error("⚠️ PIN must be exactly 4 digits (numbers only).")
+                                elif new_pin_a.strip() != new_pin_b.strip():
+                                    st.error("❌ PINs don't match. Please try again.")
+                                else:
+                                    for p in db["participants"]:
+                                        if p["id"] == part_id:
+                                            p["pin"] = new_pin_a.strip()
+                                            break
+                                    save_db(db)
+                                    
+                                    auth_token = make_auth_token(part_id, new_pin_a.strip())
+                                    
+                                    st.session_state.verified_participant_id = part_id
+                                    st.query_params["pid"] = part_id
+                                    st.query_params["tok"] = auth_token
+                                    cookie_controller.set("wc2026_pid", part_id)
+                                    cookie_controller.set("wc2026_tok", auth_token)
+                                    
+                                    st.rerun()
+                        else:
+                            st.markdown("### 🔒 Enter Your PIN")
+                            st.caption("Contact the admin if you've forgotten your PIN and need it reset.")
+                            pin_input = st.text_input("4-digit PIN:", type="password", max_chars=4, key="pin_input")
+                            if st.button("🔓 Unlock My Predictions", use_container_width=True, type="primary"):
+                                if pin_input.strip() == existing_pin:
+                                    auth_token = make_auth_token(part_id, pin_input.strip())
+                                    
+                                    st.session_state.verified_participant_id = part_id
+                                    st.query_params["pid"] = part_id
+                                    st.query_params["tok"] = auth_token
+                                    cookie_controller.set("wc2026_pid", part_id)
+                                    cookie_controller.set("wc2026_tok", auth_token)
+                                    
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Incorrect PIN. Please try again.")
+                    st.stop()
+
                 def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
                 total_fixtures = len(fixtures)
@@ -431,8 +503,6 @@ if not show_admin_panel:
                                         my_pred = f"| Your Pick: **{curr_pred['scoreA']}-{curr_pred['scoreB']}**" if curr_pred else "| ⏳ Awaiting prediction"
                                         st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
                                         st.markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])} {my_pred}")
-
-
 
     # -----------------------------------
     # VIEW: TOURNAMENT RULES 
@@ -559,17 +629,28 @@ if show_admin_panel:
         st.title("👥 Registry")
         with st.form("enroll_player_form", clear_on_submit=True):
             new_player_name = st.text_input("Enter New Player Name:")
+            new_player_pin = st.text_input("PIN (optional):", max_chars=4, help="Leave blank to let the participant set their own PIN on first login. Or pre-set one here and share it with them.")
             if st.form_submit_button("Register Participant", use_container_width=True):
                 if new_player_name.strip() != "":
-                    db["participants"].append({"id": f"p_{int(datetime.now().timestamp())}", "name": new_player_name.strip()})
-                    save_db(db); st.success(f"Enrolled!"); st.rerun()
+                    pin_value = new_player_pin.strip()
+                    if pin_value and (not pin_value.isdigit() or len(pin_value) != 4):
+                        st.error("PIN must be exactly 4 digits (numbers only), or leave it blank.")
+                    else:
+                        new_p = {"id": f"p_{int(datetime.now().timestamp())}", "name": new_player_name.strip()}
+                        if pin_value:
+                            new_p["pin"] = pin_value
+                        db["participants"].append(new_p)
+                        save_db(db); st.success(f"Enrolled!"); st.rerun()
         
         st.subheader("Current Roster")
+        st.caption("🔑 Participants without a PIN will be prompted to create their own on first login. You can also pre-set or reset any PIN here — useful if someone forgets theirs.")
         for p in participants:
             with st.container(border=True):
                 c_name, c_delete = st.columns([3, 1])
                 pred_count = len([x for x in predictions if x["participantId"] == p["id"]])
-                c_name.markdown(f"**{p['name']}** — {pred_count} prediction{'s' if pred_count != 1 else ''} on file")
+                current_pin = p.get("pin", None)
+                pin_display = f"`{current_pin}`" if current_pin else "⚠️ *Not set*"
+                c_name.markdown(f"**{p['name']}** — {pred_count} prediction{'s' if pred_count != 1 else ''} on file | 🔑 PIN: {pin_display}")
                 with c_delete:
                     if st.session_state.confirm_delete_participant == p["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_p_{p['id']}", use_container_width=True, type="primary"):
@@ -581,6 +662,19 @@ if show_admin_panel:
                         if st.button("🗑️ Del", key=f"del_{p['id']}", use_container_width=True):
                             st.session_state.confirm_delete_participant = p["id"]
                             st.rerun()
+                c_pin_input, c_pin_btn = st.columns([3, 1])
+                new_pin = c_pin_input.text_input("Reset PIN", max_chars=4, key=f"new_pin_{p['id']}", label_visibility="collapsed", placeholder="Type new 4-digit PIN to reset...")
+                if c_pin_btn.button("🔑 Set PIN", key=f"update_pin_{p['id']}", use_container_width=True):
+                    if new_pin.strip().isdigit() and len(new_pin.strip()) == 4:
+                        for part in db["participants"]:
+                            if part["id"] == p["id"]:
+                                part["pin"] = new_pin.strip()
+                                break
+                        save_db(db)
+                        st.success(f"✅ PIN updated for **{p['name']}**!")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ PIN must be exactly 4 digits (numbers only).")
                 if st.session_state.confirm_delete_participant == p["id"]:
                     st.warning(f"⚠️ Confirm removing **{p['name']}**? This will permanently delete them and all {pred_count} of their predictions.")
                     
@@ -653,7 +747,6 @@ if show_admin_panel:
                     is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                     match_header = match_headers_list[idx]
                     
-                    # Also applying the matching prediction masking for the admin-exported Excel audit log
                     fixture_all_entered = (len(participants) > 0) and sum(1 for pr in predictions if pr["fixtureId"] == f["id"]) == len(participants)
                     
                     pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
@@ -666,9 +759,9 @@ if show_admin_panel:
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
-                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Entered"
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else:
-                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "Awaiting Score"
+                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
                 row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)

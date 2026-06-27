@@ -3,3 +3,4 @@ pandas
 pymongo
 xlsxwriter
 fpdf
+streamlit-cookies-controller==0.0.3
