@@ -371,7 +371,7 @@ if not show_admin_panel:
                                     st.rerun()
                         else:
                             st.markdown("### 🔒 Enter Your PIN")
-                            st.caption("Contact the admin if you've forgotten your PIN and need it reset.")
+                            # st.caption("Contact the admin if you've forgotten your PIN and need it reset.")
                             pin_input = st.text_input("4-digit PIN:", type="password", max_chars=4, key="pin_input")
                             if st.button("🔓 Unlock My Predictions", use_container_width=True, type="primary"):
                                 if pin_input.strip() == existing_pin:
