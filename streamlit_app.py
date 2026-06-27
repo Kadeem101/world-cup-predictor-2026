@@ -457,7 +457,7 @@ if not show_admin_panel:
             st.info(
                 "💡 **Note:** You'll only be able to view the other "
                 "players' predictions once everyone enters their scores "
-                "for that fixture."
+                "for that game."
             )
 
             output = BytesIO()
