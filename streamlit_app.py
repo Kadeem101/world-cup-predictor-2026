@@ -110,7 +110,6 @@ def save_db(data):
 def get_flag(team): return FLAGS.get(team, "⚽")
 
 def flag_img_html(team, size="48x36"):
-    """Returns an <img> tag for the team flag at the requested size, or a fallback emoji span."""
     md = FLAGS.get(team, "")
     if "(https://" in md:
         url = md.split("(")[1].rstrip(")").replace("16x12", size)
@@ -164,15 +163,12 @@ def generate_pdf_summary(name, predictions, fixtures):
 # ==========================================
 st.set_page_config(layout="wide", page_title="WC2026 Dashboard")
 
-# 1. Load the database ONE time globally.
 db = load_db()
 
-# 2. Extract global state variables so we don't fetch them redundantly 20 times.
 participants = db.get("participants", [])
 fixtures = db.get("fixtures", [])
 predictions = db.get("predictions", [])
 
-# 3. Handle global timezone and dates
 ast_tz = timezone(timedelta(hours=-4))
 today_str = datetime.now(ast_tz).strftime("%Y-%m-%d")
 
@@ -243,6 +239,10 @@ if not show_admin_panel:
                 for idx, f in enumerate(fixtures):
                     is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                     match_header = match_headers_list[idx]
+                    
+                    # Logic to hide/show predictions based on total participation per match
+                    fixture_all_entered = (len(participants) > 0) and sum(1 for pr in predictions if pr["fixtureId"] == f["id"]) == len(participants)
+                    
                     pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
                     
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
@@ -253,8 +253,12 @@ if not show_admin_panel:
                             if pts >= 3: outcome_count += 1
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
-                        else: match_breakdowns[match_header] = pred_str
-                    else: match_breakdowns[match_header] = "---"
+                        else:
+                            # Show "Score Entered" placeholder if not everyone has entered their scores yet
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Entered"
+                    else:
+                        # Show "Pending" placeholder if they haven't entered their scores
+                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "Awaiting Score"
                 
                 row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
@@ -268,11 +272,24 @@ if not show_admin_panel:
                 keep_cols = ["Participant", "Total Points", "Exact (1pt)", "Outcome (3pt)"] + filter_matches
                 df_filtered = df_filtered[keep_cols]
             
-            # Add rank column to the full table
             df_filtered.insert(0, "Rank", range(1, len(df_filtered) + 1))
-            st.dataframe(df_filtered, use_container_width=True, hide_index=True,
+            # --- DEFINE STYLING FUNCTION ---
+            def color_status(val):
+                if val == "Score Entered":
+                    return 'color: #2ecc71' # Light Green
+                elif val == "Awaiting Score":
+                    return 'color: #FF8C4A' # Light Red
+                return ''
+
+            # --- APPLY STYLING AND RENDER ---
+            # Using .map() (replaces deprecated applymap)
+            styled_df = df_filtered.style.map(color_status)
+            
+            st.dataframe(styled_df, use_container_width=True, hide_index=True,
                          column_config={"Participant": st.column_config.Column(pinned=True),
                                         "Rank": st.column_config.Column(pinned=True)})
+            
+            st.info("💡 **Note:** Specific predictions for participants are hidden until everyone has submitted their scores for that match.")
             
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -301,7 +318,6 @@ if not show_admin_panel:
                 part_id = participant["id"]
                 def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
-                # Progress indicator
                 total_fixtures = len(fixtures)
                 predicted_count = sum(1 for f in fixtures if get_existing_pred(f["id"]) is not None)
                 pending_count = len([f for f in fixtures if f.get("status") != "FINISHED" and get_existing_pred(f["id"]) is None])
@@ -331,7 +347,6 @@ if not show_admin_panel:
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
 
                                 if f["id"] in st.session_state.staged_pred:
-                                    # ── REVIEW MODE ──────────────────────────────────
                                     sA, sB = st.session_state.staged_pred[f["id"]]
 
                                     if sA > sB:   outcome = f"🏆 {f['teamA']} Win"
@@ -371,7 +386,6 @@ if not show_admin_panel:
                                         st.rerun()
 
                                 else:
-                                    # ── ENTRY MODE ───────────────────────────────────
                                     cols = st.columns([3, 1, 1])
                                     cols[0].markdown(f"{get_flag(f['teamA'])} **{f['teamA']}** vs **{f['teamB']}** {get_flag(f['teamB'])}")
                                     vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
@@ -512,7 +526,6 @@ if show_admin_panel:
                             st.session_state.confirm_delete_fixture = f["id"]
                             st.rerun()
 
-                # Inline warning when a confirmation is pending for this fixture
                 if st.session_state.confirm_finish == f["id"]:
                     st.warning(f"⚠️ Confirm finishing **{f['teamA']} {val_sa} – {val_sb} {f['teamB']}**? This locks all predictions.")
                 elif st.session_state.confirm_delete_fixture == f["id"]:
@@ -591,7 +604,6 @@ if show_admin_panel:
                 sel_fixture_str = st.selectbox("2. Select Match", match_options)
                 
                 if sel_fixture_str != "-- Select Match --":
-                    # Find fixture by reconstructing the label
                     f_obj = next((f for f in fixtures if fixture_label(f) == sel_fixture_str), None)
                     if f_obj:
                         f_id = f_obj["id"]
@@ -640,6 +652,10 @@ if show_admin_panel:
                 for idx, f in enumerate(fixtures):
                     is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
                     match_header = match_headers_list[idx]
+                    
+                    # Also applying the matching prediction masking for the admin-exported Excel audit log
+                    fixture_all_entered = (len(participants) > 0) and sum(1 for pr in predictions if pr["fixtureId"] == f["id"]) == len(participants)
+                    
                     pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
@@ -649,8 +665,10 @@ if show_admin_panel:
                             if pts >= 3: outcome_count += 1
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
-                        else: match_breakdowns[match_header] = pred_str
-                    else: match_breakdowns[match_header] = "---"
+                        else:
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Entered"
+                    else:
+                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "Awaiting Score"
                 row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)
