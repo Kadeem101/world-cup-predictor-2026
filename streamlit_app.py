@@ -38,6 +38,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
+MATCHES_PER_PAGE = 10
+
 TEAMS = [
     "Algeria", "Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", 
     "Brazil", "Canada", "Cape Verde", "Colombia", "Croatia", "Curaçao", 
@@ -186,6 +188,7 @@ if "confirm_delete_fixture" not in st.session_state: st.session_state.confirm_de
 if "confirm_delete_participant" not in st.session_state: st.session_state.confirm_delete_participant = None
 if "staged_pred" not in st.session_state: st.session_state.staged_pred = {}
 if "verified_participant_id" not in st.session_state: st.session_state.verified_participant_id = None
+if "selected_match_start" not in st.session_state: st.session_state.selected_match_start = None
 
 cookie_controller = CookieController()
 
@@ -251,71 +254,225 @@ if not show_admin_panel:
         else:
             unified_data = []
             match_headers_list = []
-            
+
             for f in fixtures:
-                is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
-                match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]" if is_finished else f"{f['teamA']} vs {f['teamB']} [Pending]"
+                is_finished = (
+                    f.get("status") == "FINISHED"
+                    and f.get("scoreA") is not None
+                    and f.get("scoreB") is not None
+                )
+
+                match_header = (
+                    f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]"
+                    if is_finished
+                    else f"{f['teamA']} vs {f['teamB']} [Pending]"
+                )
+
                 match_headers_list.append(match_header)
-                
+
+            # -----------------------------
+            # Build dataframe
+            # -----------------------------
             for p in participants:
-                total_score, exact_count, outcome_count = 0, 0, 0
+                total_score = 0
+                exact_count = 0
+                outcome_count = 0
+
                 row_data = {"Participant": p["name"]}
                 match_breakdowns = {}
-                p_preds = [pr for pr in predictions if pr["participantId"] == p["id"]]
-                
+
+                p_preds = [
+                    pr for pr in predictions
+                    if pr["participantId"] == p["id"]
+                ]
+
                 for idx, f in enumerate(fixtures):
-                    is_finished = f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None
+
+                    is_finished = (
+                        f.get("status") == "FINISHED"
+                        and f.get("scoreA") is not None
+                        and f.get("scoreB") is not None
+                    )
+
                     match_header = match_headers_list[idx]
-                    
-                    fixture_all_entered = (len(participants) > 0) and sum(1 for pr in predictions if pr["fixtureId"] == f["id"]) == len(participants)
-                    
-                    pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
-                    
-                    if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
+
+                    fixture_all_entered = (
+                        len(participants) > 0
+                        and sum(
+                            1
+                            for pr in predictions
+                            if pr["fixtureId"] == f["id"]
+                        ) == len(participants)
+                    )
+
+                    pred = next(
+                        (
+                            pr
+                            for pr in p_preds
+                            if pr["fixtureId"] == f["id"]
+                        ),
+                        None,
+                    )
+
+                    if (
+                        pred is not None
+                        and pred.get("scoreA") is not None
+                        and pred.get("scoreB") is not None
+                    ):
+
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
+
                         if is_finished:
-                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
-                            if pts == 4: exact_count += 1
-                            if pts >= 3: outcome_count += 1
+
+                            pts = compute_points(
+                                pred["scoreA"],
+                                pred["scoreB"],
+                                f["scoreA"],
+                                f["scoreB"],
+                            )
+
+                            if pts == 4:
+                                exact_count += 1
+
+                            if pts >= 3:
+                                outcome_count += 1
+
                             total_score += pts
-                            match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
+
+                            match_breakdowns[
+                                match_header
+                            ] = f"{pred_str} ({pts} pts)"
+
                         else:
-                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
+
+                            match_breakdowns[
+                                match_header
+                            ] = (
+                                pred_str
+                                if fixture_all_entered
+                                else "Score Submitted"
+                            )
+
                     else:
-                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
-                
-                row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
+
+                        match_breakdowns[
+                            match_header
+                        ] = (
+                            "---"
+                            if (is_finished or fixture_all_entered)
+                            else "No Score Yet"
+                        )
+
+                row_data.update({
+                    "Total Points": total_score,
+                    "Exact (1pt)": exact_count,
+                    "Outcome (3pt)": outcome_count,
+                })
+
                 row_data.update(match_breakdowns)
+
                 unified_data.append(row_data)
-                
-            df_unified = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (1pt)"], ascending=[False, False])
+
+            df_unified = pd.DataFrame(unified_data).sort_values(
+                by=["Total Points", "Exact (1pt)"],
+                ascending=[False, False],
+            )
+
+            # -----------------------------
+            # Intelligent Sliding Window Logic
+            # -----------------------------
+            # Find the index of the first match that is NOT finished
+            first_pending_idx = next(
+                (i for i, f in enumerate(fixtures) if f.get("status") != "FINISHED"), 
+                len(fixtures)
+            )
+
+            # Create a window of 10 matches: 5 before the current pending match, and 5 after
+            start_idx = max(0, first_pending_idx - 5)
+            end_idx = min(len(fixtures), start_idx + 10)
             
-            filter_matches = st.multiselect("Filter by Specific Matches:", options=match_headers_list, placeholder="Showing all matches...")
-            df_filtered = df_unified.copy()
-            if filter_matches:
-                keep_cols = ["Participant", "Total Points", "Exact (1pt)", "Outcome (3pt)"] + filter_matches
-                df_filtered = df_filtered[keep_cols]
+            # These are the 10 matches that will show up automatically
+            default_matches = match_headers_list[start_idx:end_idx]
+
+            # -----------------------------
+            # Searchable Multi-Select UI
+            # -----------------------------
+            selected_matches = st.multiselect(
+                "🔍 Search and select matches to view (showing the 10 most recent/upcoming by default):",
+                options=match_headers_list,
+                default=default_matches,
+                placeholder="Type a team name to add a match..."
+            )
+
+            # -----------------------------
+            # Filter and Display the Table
+            # -----------------------------
+            # Base columns that should always be visible
+            keep_cols = [
+                "Participant",
+                "Total Points",
+                "Exact (1pt)",
+                "Outcome (3pt)"
+            ]
             
-            df_filtered.insert(0, "Rank", range(1, len(df_filtered) + 1))
+            # Add whichever matches the user currently has selected in the box
+            keep_cols.extend(selected_matches)
+
+            df_filtered = df_unified[keep_cols]
+
+            df_filtered.insert(
+                0,
+                "Rank",
+                range(1, len(df_filtered) + 1),
+            )
+
             def color_status(val):
                 if val == "Score Submitted":
-                    return 'color: #2ecc71'
-                elif val == "No Score Yet":
-                    return 'color: #FF8C4A'
-                return ''
+                    return "color: #2ecc71"
+                if val == "No Score Yet":
+                    return "color: #FF8C4A"
+                return ""
 
             styled_df = df_filtered.style.map(color_status)
-            
-            st.dataframe(styled_df, use_container_width=True, hide_index=True,
-                         column_config={"Participant": st.column_config.Column(pinned=True),
-                                        "Rank": st.column_config.Column(pinned=True)})
-            
-            st.info("💡 **Note:** You'll only see other players' predictions once everyone has submitted their scores.")
-            
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Participant": st.column_config.Column(
+                        pinned=True
+                    ),
+                    "Rank": st.column_config.Column(
+                        pinned=True
+                    ),
+                },
+            )
+
+            st.info(
+                "💡 **Note:** You'll only be able to view the other "
+                "players' predictions once everyone enters their scores "
+                "for that fixture."
+            )
+
             output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_unified.to_excel(writer, index=False)
-            st.download_button("📥 Download Excel Audit (.xlsx)", data=output.getvalue(), file_name="Tournament_Audit_Log.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
+
+            with pd.ExcelWriter(
+                output,
+                engine="xlsxwriter",
+            ) as writer:
+
+                df_unified.to_excel(
+                    writer,
+                    index=False,
+                )
+
+            st.download_button(
+                "📥 Download Excel Audit (.xlsx)",
+                data=output.getvalue(),
+                file_name="Tournament_Audit_Log.xlsx",
+                mime="application/vnd.ms-excel",
+                use_container_width=True,
+            )
 
     # -----------------------------------
     # VIEW: ENTER / SUBMIT SCORES
