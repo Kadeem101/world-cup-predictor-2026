@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from fpdf import FPDF
 from streamlit_cookies_controller import CookieController
+import time
 
 # --- CUSTOM CSS FOR POLISHED INTERFACE ---
 st.markdown("""
@@ -193,6 +194,10 @@ if "selected_match_start" not in st.session_state: st.session_state.selected_mat
 cookie_controller = CookieController()
 
 # --- AUTO-LOGIN FROM COOKIES & QUERY PARAMS ---
+# 1. Initialize a circuit breaker in session state
+if "auth_synced" not in st.session_state:
+    st.session_state.auth_synced = False
+
 _cpid = cookie_controller.get("wc2026_pid")
 _ctok = cookie_controller.get("wc2026_tok")
 
@@ -207,13 +212,11 @@ if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
             st.session_state.verified_participant_id = _qpid
             st.session_state.selected_name = _qpart["name"]
             
-            # ONLY set cookies if they aren't already set properly
-            # This absolutely prevents the infinite refresh loop!
-            if _cpid != _qpid or _ctok != _qtok:
+            # 2. Only attempt to set the cookie if we haven't already tried this session
+            if (_cpid != _qpid or _ctok != _qtok) and not st.session_state.auth_synced:
                 cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
                 cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
-            
-            # NOTE: There is no st.rerun() here anymore. The script will flow naturally.
+                st.session_state.auth_synced = True # Flip the breaker to stop the loop!
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -533,6 +536,7 @@ if not show_admin_panel:
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
 
+                                    time.sleep(0.2) # <-- ADD THIS: Gives the browser time to save the cookie
                                     st.rerun()
 
                         else:
@@ -547,7 +551,8 @@ if not show_admin_panel:
                                     st.query_params["tok"] = auth_token
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
-                                    
+
+                                    time.sleep(0.2) # <-- ADD THIS: Gives the browser time to save the cookie
                                     st.rerun()
                                 else:
                                     st.error("❌ Incorrect PIN. Please try again.")
