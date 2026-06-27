@@ -201,12 +201,10 @@ if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
             st.session_state.verified_participant_id = _qpid
             st.session_state.selected_name = _qpart["name"]
             
-            # Save it to their cookies with a 1-year lifespan (31,536,000 seconds)
-            if not cookie_controller.get("wc2026_pid"):
-                cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
-                cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
-            
-            # st.rerun() # Instantly refreshes the UI the millisecond cookies are found
+            # Refresh cookie with a 1-year lifespan (31,536,000 seconds)
+            cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
+            cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
+            st.rerun()
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -217,7 +215,8 @@ with st.sidebar:
     if not st.session_state.admin_authenticated:
         key = st.text_input("Admin Key", type="password")
         if st.button("Verify Key", use_container_width=True):
-            if key == "admin123":
+            admin_key = st.secrets.get("admin", {}).get("key", "")
+            if admin_key and key == admin_key:
                 st.session_state.admin_authenticated = True
                 st.success("Access Granted"); st.rerun()
             else: st.error("Invalid Key")
@@ -277,7 +276,7 @@ if not show_admin_panel:
                         if is_finished:
                             pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
                             if pts == 4: exact_count += 1
-                            if pts >= 3: outcome_count += 1
+                            if pts == 3: outcome_count += 1
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
@@ -339,13 +338,10 @@ if not show_admin_panel:
             if participant:
                 part_id = participant["id"]
 
-# --- PIN VERIFICATION GATE ---
+                # --- PIN VERIFICATION GATE ---
                 if st.session_state.verified_participant_id != part_id:
                     st.session_state.verified_participant_id = None
                     existing_pin = str(participant.get("pin", "")).strip()
-
-                    # 1. ADD FLAG: Track if they just authenticated successfully
-                    just_unlocked = False 
 
                     with st.container(border=True):
                         if not existing_pin:
@@ -364,38 +360,29 @@ if not show_admin_panel:
                                             p["pin"] = new_pin_a.strip()
                                             break
                                     save_db(db)
-                                    
                                     auth_token = make_auth_token(part_id, new_pin_a.strip())
-                                    
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
-                                    
-                                    # 2. UPDATE FLAG INSTEAD OF RERUN
-                                    just_unlocked = True 
+                                    st.rerun()
                         else:
                             st.markdown("### 🔒 Enter Your PIN")
                             pin_input = st.text_input("4-digit PIN:", type="password", max_chars=4, key="pin_input")
                             if st.button("🔓 Unlock My Predictions", use_container_width=True, type="primary"):
                                 if pin_input.strip() == existing_pin:
                                     auth_token = make_auth_token(part_id, pin_input.strip())
-                                    
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
-                                    
-                                    # 3. UPDATE FLAG INSTEAD OF RERUN
-                                    just_unlocked = True 
+                                    st.rerun()
                                 else:
                                     st.error("❌ Incorrect PIN. Please try again.")
-                    
-                    # 4. ONLY STOP THE SCRIPT IF THEY DID NOT JUST UNLOCK
-                    if not just_unlocked:
-                        st.stop()
+
+                    st.stop()
 
                 def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
 
@@ -697,7 +684,10 @@ if show_admin_panel:
             sel_participant_name = st.selectbox("1. Select Participant", ["-- Select User --"] + [p["name"] for p in participants])
             
             if sel_participant_name != "-- Select User --":
-                p_id = next(p["id"] for p in participants if p["name"] == sel_participant_name)
+                p_id = next((p["id"] for p in participants if p["name"] == sel_participant_name), None)
+                if not p_id:
+                    st.error("Participant not found. Please refresh and try again.")
+                    st.stop()
                 
                 def fixture_label(f):
                     status_tag = "✅ Final" if f["status"] == "FINISHED" else "⏳ Pending"
@@ -764,7 +754,7 @@ if show_admin_panel:
                         if is_finished:
                             pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
                             if pts == 4: exact_count += 1
-                            if pts >= 3: outcome_count += 1
+                            if pts == 3: outcome_count += 1
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
