@@ -343,11 +343,12 @@ if not show_admin_panel:
 
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
+                        pred_adv = pred.get("advancedTeam")
 
                         if is_finished:
                             pts = compute_points(
                                 pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], 
-                                f.get("phase", "Group Stage"), pred.get("advancedTeam"), f.get("advancedTeam")
+                                f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam")
                             )
                             
                             pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
@@ -360,8 +361,19 @@ if not show_admin_panel:
                                     exact_count += 1
 
                             total_score += pts
+
+                            # 💡 NEW: Show who they picked to advance on knockout draws, with a
+                            # ✅/❌ so it's clear any bonus point came from the advance pick,
+                            # not from the scoreline being an exact match.
+                            if pred_adv:
+                                act_adv = f.get("advancedTeam")
+                                adv_icon = "✅" if (act_adv and pred_adv == act_adv) else "❌"
+                                pred_str += f" ➡️ {pred_adv} {adv_icon}"
+
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
+                            if pred_adv:
+                                pred_str += f" ➡️ {pred_adv}"
                             match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else:
                         match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
@@ -886,8 +898,9 @@ if show_admin_panel:
                     pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
+                        pred_adv = pred.get("advancedTeam")
                         if is_finished:
-                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], f.get("phase", "Group Stage"), pred.get("advancedTeam"), f.get("advancedTeam"))
+                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam"))
                             pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
                             act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
                             pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
@@ -897,8 +910,15 @@ if show_admin_panel:
                                 if pA == aA and pB == aB: exact_count += 1
                                     
                             total_score += pts
+                            if pred_adv:
+                                act_adv = f.get("advancedTeam")
+                                adv_icon = "✅" if (act_adv and pred_adv == act_adv) else "❌"
+                                pred_str += f" ➡️ {pred_adv} {adv_icon}"
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
-                        else: match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
+                        else:
+                            if pred_adv:
+                                pred_str += f" ➡️ {pred_adv}"
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else: match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
                 row_data.update({"Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pts)": outcome_count})
                 row_data.update(match_breakdowns)
