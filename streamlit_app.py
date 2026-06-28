@@ -238,8 +238,19 @@ if "auth_synced" not in st.session_state: st.session_state.auth_synced = False
 
 cookie_controller = CookieController()
 
-_cpid = cookie_controller.get("wc2026_pid")
-_ctok = cookie_controller.get("wc2026_tok")
+def _safe_cookie_get(name):
+    # On a cold page load, the cookie component hasn't finished its
+    # browser round-trip yet, so the controller's internal cache is still
+    # None and .get() raises. Treat that brief window as "no cookie yet" --
+    # the component will deliver the real value a moment later and trigger
+    # an automatic rerun, at which point this will resolve normally.
+    try:
+        return cookie_controller.get(name)
+    except TypeError:
+        return None
+
+_cpid = _safe_cookie_get("wc2026_pid")
+_ctok = _safe_cookie_get("wc2026_tok")
 _qpid = st.query_params.get("pid", "") or _cpid
 _qtok = st.query_params.get("tok", "") or _ctok
 
