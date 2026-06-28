@@ -438,15 +438,55 @@ if not show_admin_panel:
             # These are the 10 matches that will show up automatically
             default_matches = match_headers_list[start_idx:end_idx]
 
+           # -----------------------------
+            # Predefined Match Filtering Logic
             # -----------------------------
-            # Searchable Multi-Select UI
-            # -----------------------------
-            selected_matches = st.multiselect(
-                "🔍 Search and select matches to view (showing the 10 most recent/upcoming games by default):",
-                options=match_headers_list,
-                default=default_matches,
-                placeholder="Type a team name to add a match..."
-            )
+            with st.expander("⚙️ Filter Matches"):
+                
+                # 1. Calculate lists based on fixture status
+                pending_matches = [m for i, m in enumerate(match_headers_list) if fixtures[i].get("status") != "FINISHED"]
+                
+                # Intelligent Window (Includes the clamping logic fix so it always shows 10 matches)
+                first_pending_idx = next((i for i, f in enumerate(fixtures) if f.get("status") != "FINISHED"), len(fixtures))
+                WINDOW_SIZE = 10
+                ideal_start = first_pending_idx - (WINDOW_SIZE // 2)
+                max_start = max(0, len(fixtures) - WINDOW_SIZE)
+                start_idx = max(0, min(ideal_start, max_start))
+                end_idx = min(len(fixtures), start_idx + WINDOW_SIZE)
+                intelligent_window = match_headers_list[start_idx:end_idx]
+
+                # 2. Build the streamlined preset selector
+                preset_selection = st.radio(
+                    "Choose a quick filter:",
+                    options=[
+                        "Default (last 10 matches)", 
+                        "Pending Matches", 
+                        "All Matches", 
+                        "Custom Search"
+                    ],
+                    horizontal=True
+                )
+
+                # 3. Assign the correct default list based on selection
+                if preset_selection == "Default (last 10 matches)":
+                    active_default = intelligent_window
+                elif preset_selection == "Pending Matches":
+                    active_default = pending_matches
+                elif preset_selection == "All Matches":
+                    active_default = match_headers_list
+                else: 
+                    # "Custom Search" starts empty for a blank canvas
+                    active_default = []
+
+                # 4. Render the multiselect with a dynamic key to reset widget state automatically
+                selected_matches = st.multiselect(
+                    "🔍 Search or manually remove matches from the table:",
+                    options=match_headers_list,
+                    default=active_default,
+                    placeholder="Type a team name to add a match...",
+                    label_visibility="collapsed",
+                    key=f"multiselect_{preset_selection}"
+                )
 
             # -----------------------------
             # Filter and Display the Table
