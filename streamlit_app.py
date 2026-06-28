@@ -659,7 +659,7 @@ if not show_admin_panel:
                 * **Correct Outcome:** 3 pts *(Win / Draw after 90-Min)*
                 * **Exact Score:** +1 pt bonus *(After 90-Min)*
                 * **Winner Bonus:** +1 pt bonus
-                  *(Unlocks if you predict a Draw after 90-Min. You then guess who wins via ET/Penalties.)*
+                  *(Only awarded if you predict a Draw after 90-Min and correctly guess who wins via ET/Penalties.)*
                 * **Max Points:** **5 pts per match**
                 """)
             
