@@ -35,6 +35,18 @@ st.markdown("""
     
     /* 4. Hide the standard Streamlit footer at the bottom */
     footer { display: none !important; }
+
+    /*NEW: High-contrast Pill Badge for the Rules Button */
+    div.stButton > button strong {
+        background-color: #3c58fa;
+        color: #ffffff;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.70rem;
+        margin-left: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -134,13 +146,25 @@ def make_auth_token(part_id, pin):
     """Short verification token derived from participant ID + PIN."""
     return hashlib.sha256(f"{part_id}:{pin}:wc2026".encode()).hexdigest()[:20]
 
-def compute_points(pred_A, pred_B, act_A, act_B):
+def compute_points(pred_A, pred_B, act_A, act_B, pred_adv=None, act_adv=None):
     if act_A is None or act_B is None or pred_A is None or pred_B is None: return 0
     pA, pB, aA, aB = int(pred_A), int(pred_B), int(act_A), int(act_B)
+    points = 0
+    
     act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
     pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
-    if act_outcome == pred_outcome: return 4 if pA == aA and pB == aB else 3
-    return 0
+    
+    # 1. Base 90-min outcome (3 pts) and exact score (1 pt bonus)
+    if act_outcome == pred_outcome:
+        points += 3
+        if pA == aA and pB == aB:
+            points += 1
+            
+    # 2. Eventual winner bonus (1 pt max, only if 90-min was a draw)
+    if pred_adv and act_adv and pred_adv == act_adv:
+        points += 1
+        
+    return points
 
 # --- USER PDF SUMMARY GENERATION ---
 def generate_pdf_summary(name, predictions, fixtures):
@@ -249,7 +273,7 @@ if not show_admin_panel:
         st.session_state.active_tab = "Enter Scores"; st.rerun()
     if col2.button("🏆 View Standings", use_container_width=True, type="primary" if st.session_state.active_tab == "View Standings" else "secondary"):
         st.session_state.active_tab = "View Standings"; st.rerun()
-    if col3.button("📜 Rules", use_container_width=True, type="primary" if st.session_state.active_tab == "Rules" else "secondary"):
+    if col3.button("📜 Rules **UPDATED**", use_container_width=True, type="primary" if st.session_state.active_tab == "Rules" else "secondary"):
         st.session_state.active_tab = "Rules"; st.rerun()
 
     st.markdown("---")
@@ -338,6 +362,8 @@ if not show_admin_panel:
                                 pred["scoreB"],
                                 f["scoreA"],
                                 f["scoreB"],
+                                pred.get("advancedTeam"), 
+                                f.get("advancedTeam")
                             )
 
                             if pts == 4:
@@ -373,7 +399,7 @@ if not show_admin_panel:
                         )
 
                 row_data.update({
-                    "Total Points": total_score,
+                    "Points": total_score,
                     "Exact (1pt)": exact_count,
                     "Outcome (3pt)": outcome_count,
                 })
@@ -383,7 +409,7 @@ if not show_admin_panel:
                 unified_data.append(row_data)
 
             df_unified = pd.DataFrame(unified_data).sort_values(
-                by=["Total Points", "Exact (1pt)"],
+                by=["Points", "Exact (1pt)"],
                 ascending=[False, False],
             )
 
@@ -419,7 +445,7 @@ if not show_admin_panel:
             # Base columns that should always be visible
             keep_cols = [
                 "Participant",
-                "Total Points",
+                "Points",
                 "Exact (1pt)",
                 "Outcome (3pt)"
             ]
@@ -590,11 +616,16 @@ if not show_admin_panel:
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
 
                                 if f["id"] in st.session_state.staged_pred:
-                                    sA, sB = st.session_state.staged_pred[f["id"]]
+                                    # 💡 NEW: Safely unpack the tuple (accommodates old 2-part and new 3-part tuples)
+                                    staged_data = st.session_state.staged_pred[f["id"]]
+                                    sA, sB = staged_data[0], staged_data[1]
+                                    adv_team = staged_data[2] if len(staged_data) > 2 else None
 
-                                    if sA > sB:   outcome = f"🏆 {f['teamA']} Win"
-                                    elif sB > sA: outcome = f"🏆 {f['teamB']} Win"
-                                    else:         outcome = "🤝 Draw"
+                                    if sA > sB:   outcome = f"🏆 {f['teamA']} Win in 90 mins"
+                                    elif sB > sA: outcome = f"🏆 {f['teamB']} Win in 90 mins"
+                                    else:         
+                                        outcome = "🤝 Draw at 90 mins"
+                                        if adv_team: outcome += f" ➡️ **{adv_team} Advances**"
 
                                     st.markdown(f"""
 <div style="padding:4px 0 8px 0">
@@ -613,7 +644,7 @@ if not show_admin_panel:
 
                                     st.caption(f"Predicted result: {outcome}")
 
-                                    if sA == 0 and sB == 0:
+                                    if sA == 0 and sB == 0 and not adv_team:
                                         st.warning("⚠️ You're predicting a **0 – 0 draw** — is that intentional?")
 
                                     rev_cols = st.columns(2)
@@ -622,6 +653,8 @@ if not show_admin_panel:
                                         st.rerun()
                                     if rev_cols[1].button("✅ Confirm & Save", key=f"confirm_{f['id']}", use_container_width=True, type="primary"):
                                         new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": sA, "scoreB": sB}
+                                        if adv_team: new_pred["advancedTeam"] = adv_team # 💡 NEW: Save to DB
+                                        
                                         db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
                                         del st.session_state.staged_pred[f["id"]]
                                         save_db(db)
@@ -634,8 +667,17 @@ if not show_admin_panel:
                                     vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
                                     vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
 
+                                    #NEW: Tie-breaker logic for Knockout phases
+                                    adv_team = None
+                                    if f.get('phase', 'Group Stage').lower() != "group stage" and vA == vB:
+                                        curr_adv = curr_pred.get("advancedTeam") if curr_pred else None
+                                        adv_options = [f['teamA'], f['teamB']]
+                                        adv_idx = adv_options.index(curr_adv) if curr_adv in adv_options else 0
+                                        adv_team = st.selectbox("🤝 Match tied at 90 mins! Who wins in ET/Penalties?", adv_options, index=adv_idx, key=f"adv_{f['id']}")
+
                                     if st.button("👁️ Preview Prediction", key=f"btn_{f['id']}", use_container_width=True):
-                                        st.session_state.staged_pred[f["id"]] = (vA, vB)
+                                        # Save as a 3-part tuple so the preview screen catches it
+                                        st.session_state.staged_pred[f["id"]] = (vA, vB, adv_team)
                                         st.rerun()
 
                     user_preds = [p for p in predictions if p["participantId"] == part_id]
@@ -680,23 +722,51 @@ if not show_admin_panel:
     # -----------------------------------
     elif st.session_state.active_tab == "Rules":
         with st.container(border=True):
-            st.markdown("### How to Play")
-            st.markdown("- **3 Points:** For correctly predicting the right result (Win/Draw).")
-            st.markdown("- **Bonus Point:** +1 bonus point for correctly predicting the exact score.")
+            st.markdown("### Scoring Rules")
+            
+            # Create side-by-side columns for instant comparison
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.markdown("#### Group Stage")
+                st.markdown("""
+                * **Correct Outcome:** 3 pts *(Win / Draw)*
+                * **Exact Score:** +1 pt bonus
+                * **Max Points:** **4 pts per match**
+                """)
+                
+            with c2:
+                st.markdown("####  Knockout Stage")
+                st.markdown("""
+                * **Correct Outcome:** 3 pts  *(Win / Draw after 90-Min)*
+                * **Exact Score:** +1 pt bonus *(After 90-Min)*
+                * **Winner Bonus:** +1 pt bonus
+                  *(Unlocks if you predict a Draw after 90-Min. You then guess who wins via ET/Penalties.*
+                * **Max Points:** **5 pts per match**
+                """)
+            
+            # st.info("⚠️ **Note:** Standard point predictions are strictly locked to the scoreline at **90 Minutes** (Regular time + injury time). Extra-time scorelines do not count.")
+            
             st.divider()
-            st.markdown("### Instructions")
-            st.markdown("1. **Submit:** Enter your predictions and click \"Save\".")
-            st.markdown("2. **Download:** You can now download your scores in the 'Enter Scores' section.")
-            st.markdown("3. **Track:** Check the 'View Standings' tab to see how you rank against others.")
-            st.divider()
-            st.markdown("### Cost")
-            st.markdown("**$10 per game** (Pay Kevon).")
-            st.divider()
-            st.markdown("### Prize Distribution")
-            st.markdown("- **1st Place:** 50% of the total funds collected.")
-            st.markdown("- **2nd Place:** 30% of the total funds collected.")
-            st.markdown("- **3rd Place:** 20% of the total funds collected.")
-            st.divider()
+            
+            # Bottom row layout items
+            c3, c4 = st.columns(2)
+            with c3:
+                st.markdown("#### Cost & Prizes")
+                st.markdown("""
+                104 games - $10 per game (Pay Kevon)
+                * **1st Place:** 50% of total funds
+                * **2nd Place:** 30% of total funds
+                * **3rd Place:** 20% of total funds
+                """)
+            with c4:
+                st.markdown("#### Instructions / Help")
+                st.markdown("""
+                1. Enter Scores.
+                2. Confirm and Save scores.
+                3. Download scores.
+                """)
+            # st.info("You can audit your scores or someone else's scores by navigating to the '**View Standings**' tab and clicking on the '**Download Excel Audit' button**'.")     
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
@@ -710,7 +780,19 @@ if show_admin_panel:
             with st.form("add_new_fixture_form"):
                 teamA = st.selectbox("Home Team", sorted(TEAMS))
                 teamB = st.selectbox("Away Team", sorted(TEAMS))
-                phase = st.text_input("Tournament Phase", "Group Stage")
+
+                # 💡 NEW: Hardcoded phases to prevent data entry errors
+                TOURNAMENT_PHASES = [
+                    "Group Stage",
+                    "Round of 32",
+                    "Round of 16",
+                    "Quarterfinals",
+                    "Semifinals",
+                    "Third place play-off",
+                    "Final"
+                ]
+                phase = st.selectbox("Tournament Phase", TOURNAMENT_PHASES, index=0)
+
                 date_val = st.date_input("Scheduled Date")
                 
                 col_h, col_m, col_p = st.columns([1, 1, 1])
@@ -744,17 +826,20 @@ if show_admin_panel:
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
 
+                # 💡 NEW: Admin Tie-breaker selector
+                admin_adv_team = None
+                if f.get('phase', 'Group Stage').lower() != "group stage" and val_sa == val_sb:
+                    admin_adv_team = st.selectbox("⚖️ Match drawn at 90 mins! Who advanced?", [f['teamA'], f['teamB']], key=f"admin_adv_{f['id']}")
+
                 with cols[3]:
                     if st.session_state.confirm_finish == f["id"]:
                         if st.button("✅ Confirm", key=f"conf_fin_{f['id']}", use_container_width=True, type="primary"):
-                            f.update({"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"})
+                            update_payload = {"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"}
+                            if admin_adv_team: update_payload["advancedTeam"] = admin_adv_team # 💡 NEW: Save actual advancer
+                            
+                            f.update(update_payload)
                             st.session_state.confirm_finish = None
                             save_db(db); st.rerun()
-                    else:
-                        if st.button("✅ Finish", key=f"fin_{f['id']}", use_container_width=True):
-                            st.session_state.confirm_finish = f["id"]
-                            st.rerun()
-
                 with cols[4]:
                     if st.session_state.confirm_delete_fixture == f["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_fix_{f['id']}", use_container_width=True, type="primary"):
@@ -927,7 +1012,7 @@ if show_admin_panel:
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
                         if is_finished:
-                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"])
+                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], pred.get("advancedTeam"), f.get("advancedTeam"))
                             if pts == 4: exact_count += 1
                             if pts >= 3: outcome_count += 1
                             total_score += pts
@@ -936,10 +1021,10 @@ if show_admin_panel:
                             match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else:
                         match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
-                row_data.update({"Total Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
+                row_data.update({"Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)
-            df_export = pd.DataFrame(unified_data).sort_values(by=["Total Points", "Exact (1pt)"], ascending=[False, False])
+            df_export = pd.DataFrame(unified_data).sort_values(by=["Points", "Exact (1pt)"], ascending=[False, False])
             df_export.insert(0, "Rank", range(1, len(df_export) + 1))
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
