@@ -748,6 +748,11 @@ if show_admin_panel:
                             
                             st.session_state.confirm_finish = None
                             st.rerun()
+                    # Add this missing else block below to trigger the confirm state
+                    else:
+                        if st.button("🏁 Finish", key=f"init_fin_{f['id']}", use_container_width=True):
+                            st.session_state.confirm_finish = f["id"]
+                            st.rerun()
                 with cols[4]:
                     if st.session_state.confirm_delete_fixture == f["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_fix_{f['id']}", use_container_width=True, type="primary"):
