@@ -164,14 +164,12 @@ def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=N
     
     phase_clean = str(phase).lower().strip()
     
-    # Escalating point structures per phase
-    if "32" in phase_clean:         base_outcome, exact_bonus = 4, 2
-    elif "16" in phase_clean:       base_outcome, exact_bonus = 5, 3
-    elif "quarter" in phase_clean:  base_outcome, exact_bonus = 6, 4
-    elif "semi" in phase_clean:     base_outcome, exact_bonus = 7, 5
-    elif "third" in phase_clean:    base_outcome, exact_bonus = 8, 6
-    elif "final" in phase_clean:    base_outcome, exact_bonus = 9, 7
-    else:                           base_outcome, exact_bonus = 3, 1
+    # 💡 FIX: Flat point structure for every phase (this matches the Rules tab,
+    # which has always documented 3 outcome / +1 exact for ALL matches).
+    # Group Stage max = 4 (3+1). Knockout matches additionally qualify for the
+    # +1 advance-pick bonus below, capping every knockout match at 5 max --
+    # the same for Round of 32, R16, QF, SF, 3rd Place, and the Final.
+    base_outcome, exact_bonus = 3, 1
         
     act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
     pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
