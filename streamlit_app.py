@@ -20,23 +20,12 @@ st.markdown("""
     [data-testid="column"] { display: flex; align-items: center; }
 
     /* SURGICAL CSS TO HIDE SPECIFIC CLOUD/TOOLBAR ELEMENTS ONLY */
-    
-    /* 1. Hide the Share / Deploy Button */
     .stDeployButton, [data-testid="stAppDeployButton"] { display: none !important; }
-    
-    /* 2. Hide the GitHub, Favorites, and Edit icons specifically (Leaves 3-dots menu alone) */
     [data-testid="stToolbarActionButton"] { display: none !important; }
-    
-    /* 3. Hide the Streamlit Community Cloud overlay badges (Removes "Manage app" and floating GitHub icons) */
-    .viewerBadge_container__1QSob, 
-    .styles_viewerBadge__1yB5_,
-    .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK { display: none !important; }
-    
-    /* 4. Hide the standard Streamlit footer at the bottom */
+    .viewerBadge_container__1QSob, .styles_viewerBadge__1yB5_, .viewerBadge_link__1S137, .viewerBadge_text__1JaDK { display: none !important; }
     footer { display: none !important; }
 
-    /*NEW: High-contrast Pill Badge for the Rules Button */
+    /* High-contrast Pill Badge for the Rules Button */
     div.stButton > button strong {
         background-color: #3c58fa;
         color: #ffffff;
@@ -91,12 +80,13 @@ FLAGS = {
     "Uruguay": "![UY](https://flagcdn.com/16x12/uy.png)", "Uzbekistan": "![UZ](https://flagcdn.com/16x12/uz.png)"
 }
 
-# --- DATABASE SETUP ---
+# --- SURGICAL DATABASE FUNCTIONS (OPTIMIZED) ---
 @st.cache_resource
 def get_mongo_client():
     uri = st.secrets["mongodb"]["uri"]
     return pymongo.MongoClient(uri, tls=True, serverSelectionTimeoutMS=5000, connectTimeoutMS=10000)
 
+@st.cache_data(ttl=30)  # 💡 NEW: Caches the database read for 30 seconds to prevent constant refreshing
 def load_db():
     try:
         client = get_mongo_client()
@@ -111,18 +101,41 @@ def load_db():
         st.error(f"Database Read Error: {e}")
         return {"participants": [], "fixtures": [], "predictions": [], "teams": TEAMS}
 
-def save_db(data):
+# 💡 NEW: Targeted UPSERT / Delete functions instead of wipe-and-replace
+def save_single_prediction(pred_data):
     try:
-        client = get_mongo_client()
-        db = client[st.secrets["mongodb"]["db_name"]]
-        db.participants.delete_many({})
-        if data.get("participants"): db.participants.insert_many([dict(p) for p in data["participants"]])
-        db.fixtures.delete_many({})
-        if data.get("fixtures"): db.fixtures.insert_many([dict(f) for f in data["fixtures"]])
-        db.predictions.delete_many({})
-        if data.get("predictions"): db.predictions.insert_many([dict(p) for p in data["predictions"]])
-    except Exception as e:
-        st.error(f"Database Write Error: {e}")
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.predictions.update_one(
+            {"participantId": pred_data["participantId"], "fixtureId": pred_data["fixtureId"]},
+            {"$set": pred_data}, upsert=True
+        )
+    except Exception as e: st.error(f"DB Error: {e}")
+
+def update_single_fixture(fixture_data):
+    try:
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.fixtures.update_one({"id": fixture_data["id"]}, {"$set": fixture_data}, upsert=True)
+    except Exception as e: st.error(f"DB Error: {e}")
+
+def delete_single_fixture(fixture_id):
+    try:
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.fixtures.delete_one({"id": fixture_id})
+        db.predictions.delete_many({"fixtureId": fixture_id})
+    except Exception as e: st.error(f"DB Error: {e}")
+
+def update_single_participant(part_data):
+    try:
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.participants.update_one({"id": part_data["id"]}, {"$set": part_data}, upsert=True)
+    except Exception as e: st.error(f"DB Error: {e}")
+
+def delete_single_participant(part_id):
+    try:
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.participants.delete_one({"id": part_id})
+        db.predictions.delete_many({"participantId": part_id})
+    except Exception as e: st.error(f"DB Error: {e}")
 
 def get_flag(team): return FLAGS.get(team, "⚽")
 
@@ -143,30 +156,37 @@ def format_time(time_str):
     except: return time_str
 
 def make_auth_token(part_id, pin):
-    """Short verification token derived from participant ID + PIN."""
     return hashlib.sha256(f"{part_id}:{pin}:wc2026".encode()).hexdigest()[:20]
 
-def compute_points(pred_A, pred_B, act_A, act_B, pred_adv=None, act_adv=None):
+def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=None, act_adv=None):
     if act_A is None or act_B is None or pred_A is None or pred_B is None: return 0
     pA, pB, aA, aB = int(pred_A), int(pred_B), int(act_A), int(act_B)
-    points = 0
     
+    phase_clean = str(phase).lower().strip()
+    
+    # Escalating point structures per phase
+    if "32" in phase_clean:         base_outcome, exact_bonus = 4, 2
+    elif "16" in phase_clean:       base_outcome, exact_bonus = 5, 3
+    elif "quarter" in phase_clean:  base_outcome, exact_bonus = 6, 4
+    elif "semi" in phase_clean:     base_outcome, exact_bonus = 7, 5
+    elif "third" in phase_clean:    base_outcome, exact_bonus = 8, 6
+    elif "final" in phase_clean:    base_outcome, exact_bonus = 9, 7
+    else:                           base_outcome, exact_bonus = 3, 1
+        
     act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
     pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
     
-    # 1. Base 90-min outcome (3 pts) and exact score (1 pt bonus)
+    points = 0
     if act_outcome == pred_outcome:
-        points += 3
+        points += base_outcome
         if pA == aA and pB == aB:
-            points += 1
+            points += exact_bonus
             
-    # 2. Eventual winner bonus (1 pt max, only if 90-min was a draw)
-    if pred_adv and act_adv and pred_adv == act_adv:
-        points += 1
+    if "group" not in phase_clean and pred_adv and act_adv and pred_adv == act_adv:
+        points += 1 # Eventual winner bonus
         
     return points
 
-# --- USER PDF SUMMARY GENERATION ---
 def generate_pdf_summary(name, predictions, fixtures):
     pdf = FPDF()
     pdf.add_page()
@@ -186,6 +206,7 @@ def generate_pdf_summary(name, predictions, fixtures):
         if fix:
             match_str = f"{fix['teamA']} vs {fix['teamB']}"
             pred_str = f"{p['scoreA']} - {p['scoreB']}"
+            if p.get("advancedTeam"): pred_str += f" ({p['advancedTeam']} adv)"
             pdf.cell(110, 10, match_str.encode('latin-1', 'replace').decode('latin-1'), border=1)
             pdf.cell(45, 10, pred_str, border=1, ln=True)
             
@@ -213,18 +234,12 @@ if "confirm_delete_fixture" not in st.session_state: st.session_state.confirm_de
 if "confirm_delete_participant" not in st.session_state: st.session_state.confirm_delete_participant = None
 if "staged_pred" not in st.session_state: st.session_state.staged_pred = {}
 if "verified_participant_id" not in st.session_state: st.session_state.verified_participant_id = None
-if "selected_match_start" not in st.session_state: st.session_state.selected_match_start = None
+if "auth_synced" not in st.session_state: st.session_state.auth_synced = False
 
 cookie_controller = CookieController()
 
-# --- AUTO-LOGIN FROM COOKIES & QUERY PARAMS ---
-# 1. Initialize a circuit breaker in session state
-if "auth_synced" not in st.session_state:
-    st.session_state.auth_synced = False
-
 _cpid = cookie_controller.get("wc2026_pid")
 _ctok = cookie_controller.get("wc2026_tok")
-
 _qpid = st.query_params.get("pid", "") or _cpid
 _qtok = st.query_params.get("tok", "") or _ctok
 
@@ -236,11 +251,10 @@ if _qpid and _qtok and st.session_state.verified_participant_id != _qpid:
             st.session_state.verified_participant_id = _qpid
             st.session_state.selected_name = _qpart["name"]
             
-            # 2. Only attempt to set the cookie if we haven't already tried this session
             if (_cpid != _qpid or _ctok != _qtok) and not st.session_state.auth_synced:
                 cookie_controller.set("wc2026_pid", _qpid, max_age=31536000)
                 cookie_controller.set("wc2026_tok", _qtok, max_age=31536000)
-                st.session_state.auth_synced = True # Flip the breaker to stop the loop!
+                st.session_state.auth_synced = True
 
 st.image("assets/cover.jpg", use_container_width=True)
 
@@ -279,7 +293,7 @@ if not show_admin_panel:
     st.markdown("---")
 
     # -----------------------------------
-    # VIEW: View Standings & PERFORMANCE MATRIX
+    # VIEW: View Standings
     # -----------------------------------
     if st.session_state.active_tab == "View Standings":
         if not participants or not fixtures:
@@ -288,24 +302,16 @@ if not show_admin_panel:
             unified_data = []
             match_headers_list = []
 
+            # 💡 NEW: Performance Fix (O(N^3) bottleneck eliminated via pre-calculation)
+            pred_counts_by_fixture = {}
+            for pr in predictions:
+                pred_counts_by_fixture[pr["fixtureId"]] = pred_counts_by_fixture.get(pr["fixtureId"], 0) + 1
+
             for f in fixtures:
-                is_finished = (
-                    f.get("status") == "FINISHED"
-                    and f.get("scoreA") is not None
-                    and f.get("scoreB") is not None
-                )
-
-                match_header = (
-                    f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]"
-                    if is_finished
-                    else f"{f['teamA']} vs {f['teamB']} [Pending]"
-                )
-
+                is_finished = (f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None)
+                match_header = f"{f['teamA']} vs {f['teamB']} [{f['scoreA']}-{f['scoreB']}]" if is_finished else f"{f['teamA']} vs {f['teamB']} [Pending]"
                 match_headers_list.append(match_header)
 
-            # -----------------------------
-            # Build dataframe
-            # -----------------------------
             for p in participants:
                 total_score = 0
                 exact_count = 0
@@ -313,140 +319,58 @@ if not show_admin_panel:
 
                 row_data = {"Participant": p["name"]}
                 match_breakdowns = {}
-
-                p_preds = [
-                    pr for pr in predictions
-                    if pr["participantId"] == p["id"]
-                ]
+                p_preds = [pr for pr in predictions if pr["participantId"] == p["id"]]
 
                 for idx, f in enumerate(fixtures):
-
-                    is_finished = (
-                        f.get("status") == "FINISHED"
-                        and f.get("scoreA") is not None
-                        and f.get("scoreB") is not None
-                    )
-
+                    is_finished = (f.get("status") == "FINISHED" and f.get("scoreA") is not None and f.get("scoreB") is not None)
                     match_header = match_headers_list[idx]
 
-                    fixture_all_entered = (
-                        len(participants) > 0
-                        and sum(
-                            1
-                            for pr in predictions
-                            if pr["fixtureId"] == f["id"]
-                        ) == len(participants)
-                    )
+                    # 💡 NEW: Lightning-fast lookup
+                    fixture_all_entered = len(participants) > 0 and pred_counts_by_fixture.get(f["id"], 0) == len(participants)
 
-                    pred = next(
-                        (
-                            pr
-                            for pr in p_preds
-                            if pr["fixtureId"] == f["id"]
-                        ),
-                        None,
-                    )
+                    pred = next((pr for pr in p_preds if pr["fixtureId"] == f["id"]), None)
 
-                    if (
-                        pred is not None
-                        and pred.get("scoreA") is not None
-                        and pred.get("scoreB") is not None
-                    ):
-
+                    if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
 
                         if is_finished:
-
                             pts = compute_points(
-                                pred["scoreA"],
-                                pred["scoreB"],
-                                f["scoreA"],
-                                f["scoreB"],
-                                pred.get("advancedTeam"), 
-                                f.get("advancedTeam")
+                                pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], 
+                                f.get("phase", "Group Stage"), pred.get("advancedTeam"), f.get("advancedTeam")
                             )
-
-                            if pts == 4:
-                                exact_count += 1
-
-                            if pts >= 3:
+                            
+                            pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
+                            act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
+                            pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
+                            
+                            if act_outcome == pred_outcome:
                                 outcome_count += 1
+                                if pA == aA and pB == aB:
+                                    exact_count += 1
 
                             total_score += pts
-
-                            match_breakdowns[
-                                match_header
-                            ] = f"{pred_str} ({pts} pts)"
-
+                            match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
                         else:
-
-                            match_breakdowns[
-                                match_header
-                            ] = (
-                                pred_str
-                                if fixture_all_entered
-                                else "Score Submitted"
-                            )
-
+                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
                     else:
-
-                        match_breakdowns[
-                            match_header
-                        ] = (
-                            "---"
-                            if (is_finished or fixture_all_entered)
-                            else "No Score Yet"
-                        )
+                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
 
                 row_data.update({
                     "Points": total_score,
                     "Exact (1pt)": exact_count,
-                    "Outcome (3pt)": outcome_count,
+                    "Outcome (3pts)": outcome_count,
                 })
-
                 row_data.update(match_breakdowns)
-
                 unified_data.append(row_data)
 
-            df_unified = pd.DataFrame(unified_data).sort_values(
-                by=["Points", "Exact (1pt)"],
-                ascending=[False, False],
-            )
+            df_unified = pd.DataFrame(unified_data).sort_values(by=["Points", "Exact (1pt)"], ascending=[False, False])
 
             # -----------------------------
-            # Intelligent Sliding Window Logic
-            # -----------------------------
-            # Find the index of the first match that is NOT finished
-            first_pending_idx = next(
-                (i for i, f in enumerate(fixtures) if f.get("status") != "FINISHED"), 
-                len(fixtures)
-            )
-
-            # Define our fixed window size
-            WINDOW_SIZE = 10
-            
-            # Ideally, start 5 matches before the first pending match
-            ideal_start = first_pending_idx - (WINDOW_SIZE // 2)
-            
-            # Clamp the math: Prevent starting past the point where 10 matches can fit
-            max_start = max(0, len(fixtures) - WINDOW_SIZE)
-            
-            # Final start point: never less than 0, never greater than max_start
-            start_idx = max(0, min(ideal_start, max_start))
-            end_idx = min(len(fixtures), start_idx + WINDOW_SIZE)
-            
-            # These are the 10 matches that will show up automatically
-            default_matches = match_headers_list[start_idx:end_idx]
-
-           # -----------------------------
             # Predefined Match Filtering Logic
             # -----------------------------
             with st.expander("⚙️ Filter Matches"):
-                
-                # 1. Calculate lists based on fixture status
                 pending_matches = [m for i, m in enumerate(match_headers_list) if fixtures[i].get("status") != "FINISHED"]
                 
-                # Intelligent Window (Includes the clamping logic fix so it always shows 10 matches)
                 first_pending_idx = next((i for i, f in enumerate(fixtures) if f.get("status") != "FINISHED"), len(fixtures))
                 WINDOW_SIZE = 10
                 ideal_start = first_pending_idx - (WINDOW_SIZE // 2)
@@ -455,30 +379,17 @@ if not show_admin_panel:
                 end_idx = min(len(fixtures), start_idx + WINDOW_SIZE)
                 intelligent_window = match_headers_list[start_idx:end_idx]
 
-                # 2. Build the streamlined preset selector
                 preset_selection = st.radio(
                     "Choose a quick filter:",
-                    options=[
-                        "Default (last 10 matches)", 
-                        "Pending Matches", 
-                        "All Matches", 
-                        "Custom Search"
-                    ],
+                    options=["Default (last 10 matches)", "Pending Matches", "All Matches", "Custom Search"],
                     horizontal=True
                 )
 
-                # 3. Assign the correct default list based on selection
-                if preset_selection == "Default (last 10 matches)":
-                    active_default = intelligent_window
-                elif preset_selection == "Pending Matches":
-                    active_default = pending_matches
-                elif preset_selection == "All Matches":
-                    active_default = match_headers_list
-                else: 
-                    # "Custom Search" starts empty for a blank canvas
-                    active_default = []
+                if preset_selection == "Default (last 10 matches)": active_default = intelligent_window
+                elif preset_selection == "Pending Matches": active_default = pending_matches
+                elif preset_selection == "All Matches": active_default = match_headers_list
+                else: active_default = []
 
-                # 4. Render the multiselect with a dynamic key to reset widget state automatically
                 selected_matches = st.multiselect(
                     "🔍 Search or manually remove matches from the table:",
                     options=match_headers_list,
@@ -488,89 +399,41 @@ if not show_admin_panel:
                     key=f"multiselect_{preset_selection}"
                 )
 
-            # -----------------------------
-            # Filter and Display the Table
-            # -----------------------------
-            # Base columns that should always be visible
-            keep_cols = [
-                "Participant",
-                "Points",
-                "Exact (1pt)",
-                "Outcome (3pt)"
-            ]
-            
-            # Add whichever matches the user currently has selected in the box
-            keep_cols.extend(selected_matches)
-
+            keep_cols = ["Participant", "Points", "Exact (1pt)", "Outcome (3pts)"] + selected_matches
             df_filtered = df_unified[keep_cols]
-
-            df_filtered.insert(
-                0,
-                "Rank",
-                range(1, len(df_filtered) + 1),
-            )
+            df_filtered.insert(0, "Rank", range(1, len(df_filtered) + 1))
 
             def color_status(val):
-                if val == "Score Submitted":
-                    return "color: #2ecc71"
-                if val == "No Score Yet":
-                    return "color: #FF8C4A"
+                if val == "Score Submitted": return "color: #2ecc71"
+                if val == "No Score Yet": return "color: #FF8C4A"
                 return ""
 
             styled_df = df_filtered.style.map(color_status)
             st.dataframe(
-                styled_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Participant": st.column_config.Column(
-                        pinned=True
-                    ),
-                    "Rank": st.column_config.Column(
-                        pinned=True
-                    ),
-                },
+                styled_df, use_container_width=True, hide_index=True,
+                column_config={"Participant": st.column_config.Column(pinned=True), "Rank": st.column_config.Column(pinned=True)}
             )
 
-            st.info(
-                "💡 **Note:** You'll only be able to view the other "
-                "players' predictions once everyone enters their scores "
-                "for that game."
-            )
+            st.info("💡 **Note:** You'll only be able to view the other players' predictions once everyone enters their scores for that game.")
 
             output = BytesIO()
-
-            with pd.ExcelWriter(
-                output,
-                engine="xlsxwriter",
-            ) as writer:
-
-                df_unified.to_excel(
-                    writer,
-                    index=False,
-                )
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df_unified.to_excel(writer, index=False)
 
             st.download_button(
                 "📥 Download Excel Audit (.xlsx)",
-                data=output.getvalue(),
-                file_name="Tournament_Audit_Log.xlsx",
-                mime="application/vnd.ms-excel",
-                use_container_width=True,
+                data=output.getvalue(), file_name="Tournament_Audit_Log.xlsx",
+                mime="application/vnd.ms-excel", use_container_width=True,
             )
 
     # -----------------------------------
-    # VIEW: ENTER / SUBMIT SCORES
+    # VIEW: ENTER SCORES
     # -----------------------------------
     elif st.session_state.active_tab == "Enter Scores":
         st.subheader("Submit Your Scores")
         participant_names = [p["name"] for p in participants]
 
-        selected_name = st.selectbox(
-            "Who are you?",
-            options=participant_names,
-            key="selected_name",
-            placeholder="Select your name...",
-        )
+        selected_name = st.selectbox("Who are you?", options=participant_names, key="selected_name", placeholder="Select your name...")
 
         if not selected_name:
             st.info("Please select your name above to unlock your prediction board.")
@@ -579,11 +442,10 @@ if not show_admin_panel:
             if participant:
                 part_id = participant["id"]
 
-                # --- PIN VERIFICATION GATE ---
+                # --- PIN VERIFICATION ---
                 if st.session_state.verified_participant_id != part_id:
                     st.session_state.verified_participant_id = None
                     existing_pin = str(participant.get("pin", "")).strip()
-
 
                     with st.container(border=True):
                         if not existing_pin:
@@ -597,44 +459,39 @@ if not show_admin_panel:
                                 elif new_pin_a.strip() != new_pin_b.strip():
                                     st.error("❌ PINs don't match. Please try again.")
                                 else:
-                                    for p in db["participants"]:
-                                        if p["id"] == part_id:
-                                            p["pin"] = new_pin_a.strip()
-                                            break
-                                    save_db(db)
+                                    participant["pin"] = new_pin_a.strip()
+                                    update_single_participant(participant) # 💡 NEW: Upsert safe
+                                    load_db.clear()
                                     
                                     auth_token = make_auth_token(part_id, new_pin_a.strip())
-                                    
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
 
-                                    time.sleep(0.2) # <-- ADD THIS: Gives the browser time to save the cookie
+                                    time.sleep(0.2)
                                     st.rerun()
-
                         else:
                             st.markdown("### 🔒 Enter Your PIN")
                             pin_input = st.text_input("4-digit PIN:", type="password", max_chars=4, key="pin_input")
                             if st.button("🔓 Unlock My Predictions", use_container_width=True, type="primary"):
                                 if pin_input.strip() == existing_pin:
                                     auth_token = make_auth_token(part_id, pin_input.strip())
-                                    
                                     st.session_state.verified_participant_id = part_id
                                     st.query_params["pid"] = part_id
                                     st.query_params["tok"] = auth_token
                                     cookie_controller.set("wc2026_pid", part_id, max_age=31536000)
                                     cookie_controller.set("wc2026_tok", auth_token, max_age=31536000)
-
-                                    time.sleep(0.2) # <-- ADD THIS: Gives the browser time to save the cookie
+                                    time.sleep(0.2)
                                     st.rerun()
                                 else:
                                     st.error("❌ Incorrect PIN. Please try again.")
-                    
                     st.stop()
 
-                def get_existing_pred(fid): return next((p for p in predictions if p["participantId"] == part_id and p["fixtureId"] == fid), None)
+                # 💡 NEW: Performance Fix (O(N^2) Loop mapping)
+                user_pred_map = {p["fixtureId"]: p for p in predictions if p["participantId"] == part_id}
+                def get_existing_pred(fid): return user_pred_map.get(fid)
 
                 total_fixtures = len(fixtures)
                 predicted_count = sum(1 for f in fixtures if get_existing_pred(f["id"]) is not None)
@@ -642,13 +499,10 @@ if not show_admin_panel:
                 progress_pct = predicted_count / total_fixtures if total_fixtures > 0 else 0
 
                 prog_col, stat_col = st.columns([3, 1])
-                with prog_col:
-                    st.progress(progress_pct, text=f"**{predicted_count} of {total_fixtures}** matches predicted")
+                with prog_col: st.progress(progress_pct, text=f"**{predicted_count} of {total_fixtures}** matches predicted")
                 with stat_col:
-                    if pending_count > 0:
-                        st.warning(f"⚠️ {pending_count} still open", icon=None)
-                    else:
-                        st.success("✅ All done for now!")
+                    if pending_count > 0: st.warning(f"⚠️ {pending_count} still open", icon=None)
+                    else: st.success("✅ All done for now!")
                 st.write("")
 
                 tab_pending, tab_schedule = st.tabs(["⏳ Pending Predictions", "📅 Full Schedule"])
@@ -665,7 +519,6 @@ if not show_admin_panel:
                                 st.caption(f"**{f.get('phase', 'Group Stage')}** | {date_text} @ {format_time(f.get('time', ''))}")
 
                                 if f["id"] in st.session_state.staged_pred:
-                                    # 💡 NEW: Safely unpack the tuple (accommodates old 2-part and new 3-part tuples)
                                     staged_data = st.session_state.staged_pred[f["id"]]
                                     sA, sB = staged_data[0], staged_data[1]
                                     adv_team = staged_data[2] if len(staged_data) > 2 else None
@@ -702,11 +555,13 @@ if not show_admin_panel:
                                         st.rerun()
                                     if rev_cols[1].button("✅ Confirm & Save", key=f"confirm_{f['id']}", use_container_width=True, type="primary"):
                                         new_pred = {"participantId": part_id, "fixtureId": f["id"], "scoreA": sA, "scoreB": sB}
-                                        if adv_team: new_pred["advancedTeam"] = adv_team # 💡 NEW: Save to DB
+                                        if adv_team: new_pred["advancedTeam"] = adv_team
                                         
-                                        db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == part_id and p["fixtureId"] == f["id"])] + [new_pred]
+                                        # 💡 NEW: Upsert safe save and cache clear
+                                        save_single_prediction(new_pred)
+                                        load_db.clear()
+                                        
                                         del st.session_state.staged_pred[f["id"]]
-                                        save_db(db)
                                         st.toast(f"🎉 Prediction saved for {f['teamA']} vs {f['teamB']}!", icon="✅")
                                         st.rerun()
 
@@ -716,16 +571,14 @@ if not show_admin_panel:
                                     vA = cols[1].number_input(f"{f['teamA']}", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key=f"inpA_{f['id']}")
                                     vB = cols[2].number_input(f"{f['teamB']}", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key=f"inpB_{f['id']}")
 
-                                    #NEW: Tie-breaker logic for Knockout phases
                                     adv_team = None
                                     if f.get('phase', 'Group Stage').lower() != "group stage" and vA == vB:
                                         curr_adv = curr_pred.get("advancedTeam") if curr_pred else None
                                         adv_options = [f['teamA'], f['teamB']]
                                         adv_idx = adv_options.index(curr_adv) if curr_adv in adv_options else 0
-                                        adv_team = st.selectbox("🤝 Match tied at 90 mins! Who wins in ET/Penalties?", adv_options, index=adv_idx, key=f"adv_{f['id']}")
+                                        adv_team = st.selectbox("⚖️ Match tied at 90 mins! Who ultimately advances?", adv_options, index=adv_idx, key=f"adv_{f['id']}")
 
                                     if st.button("👁️ Preview Prediction", key=f"btn_{f['id']}", use_container_width=True):
-                                        # Save as a 3-part tuple so the preview screen catches it
                                         st.session_state.staged_pred[f["id"]] = (vA, vB, adv_team)
                                         st.rerun()
 
@@ -735,11 +588,8 @@ if not show_admin_panel:
                         pdf_data = generate_pdf_summary(selected_name, user_preds, fixtures)
                         st.download_button(
                             label="📥 Download Your Predictions (PDF)",
-                            data=pdf_data,
-                            file_name=f"Predictions_{selected_name}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="pdf_download_pending"
+                            data=pdf_data, file_name=f"Predictions_{selected_name}.pdf",
+                            mime="application/pdf", use_container_width=True, key="pdf_download_pending"
                         )
 
                 with tab_schedule:
@@ -772,8 +622,6 @@ if not show_admin_panel:
     elif st.session_state.active_tab == "Rules":
         with st.container(border=True):
             st.markdown("### Scoring Rules")
-            
-            # Create side-by-side columns for instant comparison
             c1, c2 = st.columns(2)
             
             with c1:
@@ -785,23 +633,20 @@ if not show_admin_panel:
                 """)
                 
             with c2:
-                st.markdown("####  Knockout Stage")
+                st.markdown("#### Knockout Stage")
                 st.markdown("""
-                * **Correct Outcome:** 3 pts  *(Win / Draw after 90-Min)*
+                * **Correct Outcome:** 3 pts *(Win / Draw after 90-Min)*
                 * **Exact Score:** +1 pt bonus *(After 90-Min)*
                 * **Winner Bonus:** +1 pt bonus
-                  *(Unlocks if you predict a Draw after 90-Min. You then guess who wins via ET/Penalties.*
+                  *(Unlocks if you predict a Draw after 90-Min. You then guess who wins via ET/Penalties.)*
                 * **Max Points:** **5 pts per match**
                 """)
             
-            # st.info("⚠️ **Note:** Standard point predictions are strictly locked to the scoreline at **90 Minutes** (Regular time + injury time). Extra-time scorelines do not count.")
-            
             st.divider()
             
-            # Bottom row layout items
             c3, c4 = st.columns(2)
             with c3:
-                st.markdown("#### Cost & Prizes")
+                st.markdown("#### Cost & Prize Distribution")
                 st.markdown("""
                 104 games - $10 per game (Pay Kevon)
                 * **1st Place:** 50% of total funds
@@ -809,13 +654,13 @@ if not show_admin_panel:
                 * **3rd Place:** 20% of total funds
                 """)
             with c4:
-                st.markdown("#### Instructions / Help")
+                st.markdown("#### Instructions")
                 st.markdown("""
                 1. Enter Scores.
                 2. Confirm and Save scores.
                 3. Download scores.
+                
                 """)
-            # st.info("You can audit your scores or someone else's scores by navigating to the '**View Standings**' tab and clicking on the '**Download Excel Audit' button**'.")     
 
 # ==========================================
 #         ADMIN VIEW PANEL CONTROLLERS
@@ -830,18 +675,8 @@ if show_admin_panel:
                 teamA = st.selectbox("Home Team", sorted(TEAMS))
                 teamB = st.selectbox("Away Team", sorted(TEAMS))
 
-                # 💡 NEW: Hardcoded phases to prevent data entry errors
-                TOURNAMENT_PHASES = [
-                    "Group Stage",
-                    "Round of 32",
-                    "Round of 16",
-                    "Quarterfinals",
-                    "Semifinals",
-                    "Third place play-off",
-                    "Final"
-                ]
+                TOURNAMENT_PHASES = ["Group Stage", "Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "Third place play-off", "Final"]
                 phase = st.selectbox("Tournament Phase", TOURNAMENT_PHASES, index=0)
-
                 date_val = st.date_input("Scheduled Date")
                 
                 col_h, col_m, col_p = st.columns([1, 1, 1])
@@ -860,13 +695,14 @@ if show_admin_panel:
                             "date": str(date_val), "time": f"{h_int:02d}:{min_val}", "phase": phase, 
                             "scoreA": None, "scoreB": None, "status": "PENDING"
                         }
-                        db["fixtures"].append(new_fixture); save_db(db); st.success("Match Established!"); st.rerun()
+                        # 💡 NEW: Upsert safe save
+                        update_single_fixture(new_fixture)
+                        load_db.clear()
+                        st.success("Match Established!"); st.rerun()
 
-        # --- PENDING MATCHES ---
         st.subheader("⏳ Pending Matches")
         pending_fixtures = [f for f in fixtures if f["status"] == "PENDING"]
-        if not pending_fixtures:
-            st.info("No pending matches.")
+        if not pending_fixtures: st.info("No pending matches.")
         for f in pending_fixtures:
             with st.container(border=True):
                 st.markdown(f"**{f['phase']}** | {format_date(f['date'])} @ {format_time(f['time'])}")
@@ -875,7 +711,6 @@ if show_admin_panel:
                 val_sa = cols[1].number_input(f"{f['teamA']}", 0, 20, f["scoreA"] or 0, key=f"sa_{f['id']}")
                 val_sb = cols[2].number_input(f"{f['teamB']}", 0, 20, f["scoreB"] or 0, key=f"sb_{f['id']}")
 
-                # 💡 NEW: Admin Tie-breaker selector
                 admin_adv_team = None
                 if f.get('phase', 'Group Stage').lower() != "group stage" and val_sa == val_sb:
                     admin_adv_team = st.selectbox("⚖️ Match drawn at 90 mins! Who advanced?", [f['teamA'], f['teamB']], key=f"admin_adv_{f['id']}")
@@ -883,35 +718,33 @@ if show_admin_panel:
                 with cols[3]:
                     if st.session_state.confirm_finish == f["id"]:
                         if st.button("✅ Confirm", key=f"conf_fin_{f['id']}", use_container_width=True, type="primary"):
-                            update_payload = {"scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"}
-                            if admin_adv_team: update_payload["advancedTeam"] = admin_adv_team # 💡 NEW: Save actual advancer
+                            update_payload = {"id": f["id"], "scoreA": val_sa, "scoreB": val_sb, "status": "FINISHED"}
+                            if admin_adv_team: update_payload["advancedTeam"] = admin_adv_team
                             
-                            f.update(update_payload)
+                            # 💡 NEW: Upsert safe
+                            update_single_fixture(update_payload)
+                            load_db.clear()
+                            
                             st.session_state.confirm_finish = None
-                            save_db(db); st.rerun()
+                            st.rerun()
                 with cols[4]:
                     if st.session_state.confirm_delete_fixture == f["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_fix_{f['id']}", use_container_width=True, type="primary"):
-                            db["fixtures"] = [x for x in db["fixtures"] if x["id"] != f["id"]]
-                            db["predictions"] = [x for x in db["predictions"] if x["fixtureId"] != f["id"]]
+                            delete_single_fixture(f["id"])
+                            load_db.clear()
                             st.session_state.confirm_delete_fixture = None
-                            save_db(db); st.rerun()
+                            st.rerun()
                     else:
                         if st.button("🗑️ Delete", key=f"del_fix_{f['id']}", use_container_width=True):
-                            st.session_state.confirm_delete_fixture = f["id"]
-                            st.rerun()
+                            st.session_state.confirm_delete_fixture = f["id"]; st.rerun()
 
-                if st.session_state.confirm_finish == f["id"]:
-                    st.warning(f"⚠️ Confirm finishing **{f['teamA']} {val_sa} – {val_sb} {f['teamB']}**? This locks all predictions.")
-                elif st.session_state.confirm_delete_fixture == f["id"]:
-                    st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
+                if st.session_state.confirm_finish == f["id"]: st.warning(f"⚠️ Confirm finishing **{f['teamA']} {val_sa} – {val_sb} {f['teamB']}**? This locks all predictions.")
+                elif st.session_state.confirm_delete_fixture == f["id"]: st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
 
-        # --- FINISHED MATCHES ---
         st.divider()
         st.subheader("✅ Finished Matches")
         finished_fixtures = [f for f in fixtures if f["status"] == "FINISHED"]
-        if not finished_fixtures:
-            st.info("No finished matches yet.")
+        if not finished_fixtures: st.info("No finished matches yet.")
         for f in finished_fixtures:
             with st.container(border=True):
                 cols = st.columns([4, 1])
@@ -919,36 +752,32 @@ if show_admin_panel:
                 with cols[1]:
                     if st.session_state.confirm_delete_fixture == f["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_fin_{f['id']}", use_container_width=True, type="primary"):
-                            db["fixtures"] = [x for x in db["fixtures"] if x["id"] != f["id"]]
-                            db["predictions"] = [x for x in db["predictions"] if x["fixtureId"] != f["id"]]
+                            delete_single_fixture(f["id"])
+                            load_db.clear()
                             st.session_state.confirm_delete_fixture = None
-                            save_db(db); st.rerun()
+                            st.rerun()
                     else:
                         if st.button("🗑️ Delete", key=f"del_fin_{f['id']}", use_container_width=True):
-                            st.session_state.confirm_delete_fixture = f["id"]
-                            st.rerun()
-                if st.session_state.confirm_delete_fixture == f["id"]:
-                    st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
+                            st.session_state.confirm_delete_fixture = f["id"]; st.rerun()
+                if st.session_state.confirm_delete_fixture == f["id"]: st.warning(f"⚠️ Confirm deleting **{f['teamA']} vs {f['teamB']}**? All predictions for this match will also be removed.")
 
     elif admin_menu == "👥 Participants":
         st.title("👥 Registry")
         with st.form("enroll_player_form", clear_on_submit=True):
             new_player_name = st.text_input("Enter New Player Name:")
-            new_player_pin = st.text_input("PIN (optional):", max_chars=4, help="Leave blank to let the participant set their own PIN on first login. Or pre-set one here and share it with them.")
+            new_player_pin = st.text_input("PIN (optional):", max_chars=4, help="Leave blank to let the participant set their own PIN on first login.")
             if st.form_submit_button("Register Participant", use_container_width=True):
                 if new_player_name.strip() != "":
                     pin_value = new_player_pin.strip()
-                    if pin_value and (not pin_value.isdigit() or len(pin_value) != 4):
-                        st.error("PIN must be exactly 4 digits (numbers only), or leave it blank.")
+                    if pin_value and (not pin_value.isdigit() or len(pin_value) != 4): st.error("PIN must be exactly 4 digits (numbers only), or leave it blank.")
                     else:
                         new_p = {"id": f"p_{int(datetime.now().timestamp())}", "name": new_player_name.strip()}
-                        if pin_value:
-                            new_p["pin"] = pin_value
-                        db["participants"].append(new_p)
-                        save_db(db); st.success(f"Enrolled!"); st.rerun()
+                        if pin_value: new_p["pin"] = pin_value
+                        update_single_participant(new_p)
+                        load_db.clear()
+                        st.success(f"Enrolled!"); st.rerun()
         
         st.subheader("Current Roster")
-        st.caption("🔑 Participants without a PIN will be prompted to create their own on first login. You can also pre-set or reset any PIN here — useful if someone forgets theirs.")
         for p in participants:
             with st.container(border=True):
                 c_name, c_delete = st.columns([3, 1])
@@ -959,44 +788,35 @@ if show_admin_panel:
                 with c_delete:
                     if st.session_state.confirm_delete_participant == p["id"]:
                         if st.button("🗑️ Confirm", key=f"conf_del_p_{p['id']}", use_container_width=True, type="primary"):
-                            db["participants"] = [x for x in db["participants"] if x["id"] != p["id"]]
-                            db["predictions"] = [x for x in db["predictions"] if x["participantId"] != p["id"]]
+                            delete_single_participant(p["id"])
+                            load_db.clear()
                             st.session_state.confirm_delete_participant = None
-                            save_db(db); st.rerun()
+                            st.rerun()
                     else:
                         if st.button("🗑️ Del", key=f"del_{p['id']}", use_container_width=True):
-                            st.session_state.confirm_delete_participant = p["id"]
-                            st.rerun()
+                            st.session_state.confirm_delete_participant = p["id"]; st.rerun()
                 c_pin_input, c_pin_btn = st.columns([3, 1])
                 new_pin = c_pin_input.text_input("Reset PIN", max_chars=4, key=f"new_pin_{p['id']}", label_visibility="collapsed", placeholder="Type new 4-digit PIN to reset...")
                 if c_pin_btn.button("🔑 Set PIN", key=f"update_pin_{p['id']}", use_container_width=True):
                     if new_pin.strip().isdigit() and len(new_pin.strip()) == 4:
-                        for part in db["participants"]:
-                            if part["id"] == p["id"]:
-                                part["pin"] = new_pin.strip()
-                                break
-                        save_db(db)
-                        st.success(f"✅ PIN updated for **{p['name']}**!")
-                        st.rerun()
-                    else:
-                        st.error("⚠️ PIN must be exactly 4 digits (numbers only).")
-                if st.session_state.confirm_delete_participant == p["id"]:
-                    st.warning(f"⚠️ Confirm removing **{p['name']}**? This will permanently delete them and all {pred_count} of their predictions.")
+                        p["pin"] = new_pin.strip()
+                        update_single_participant(p)
+                        load_db.clear()
+                        st.success(f"✅ PIN updated for **{p['name']}**!"); st.rerun()
+                    else: st.error("⚠️ PIN must be exactly 4 digits.")
+                if st.session_state.confirm_delete_participant == p["id"]: st.warning(f"⚠️ Confirm removing **{p['name']}**? This will permanently delete them and all {pred_count} of their predictions.")
                     
     elif admin_menu == "📝 Edit Predictions":
         st.title("📝 Edit User Predictions")
         st.info("Use this tool to securely override a user's prediction if they made an error. Users cannot edit their own scores once saved.")
         
-        if not participants or not fixtures:
-            st.warning("You need active participants and fixtures to use this tool.")
+        if not participants or not fixtures: st.warning("You need active participants and fixtures to use this tool.")
         else:
             sel_participant_name = st.selectbox("1. Select Participant", ["-- Select User --"] + [p["name"] for p in participants])
             
             if sel_participant_name != "-- Select User --":
                 p_id = next((p["id"] for p in participants if p["name"] == sel_participant_name), None)
-                if not p_id:
-                    st.error("Participant not found. Please refresh and try again.")
-                    st.stop()
+                if not p_id: st.error("Participant not found. Please refresh and try again."); st.stop()
                 
                 def fixture_label(f):
                     status_tag = "✅ Final" if f["status"] == "FINISHED" else "⏳ Pending"
@@ -1014,12 +834,9 @@ if show_admin_panel:
                         
                         with st.container(border=True):
                             st.write(f"### Update: {tA} vs {tB}")
-                            if f_obj["status"] == "FINISHED":
-                                st.caption(f"✅ Final score: **{f_obj['scoreA']} – {f_obj['scoreB']}**")
-                            if curr_pred:
-                                st.caption(f"Current prediction on file: **{curr_pred['scoreA']} - {curr_pred['scoreB']}**")
-                            else:
-                                st.caption("No prediction on file yet.")
+                            if f_obj["status"] == "FINISHED": st.caption(f"✅ Final score: **{f_obj['scoreA']} – {f_obj['scoreB']}**")
+                            if curr_pred: st.caption(f"Current prediction on file: **{curr_pred['scoreA']} - {curr_pred['scoreB']}**")
+                            else: st.caption("No prediction on file yet.")
                                 
                             c1, c2 = st.columns(2)
                             new_sa = c1.number_input(f"{tA} Score", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key="ovr_A")
@@ -1027,8 +844,8 @@ if show_admin_panel:
                             
                             if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
                                 new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
-                                db["predictions"] = [p for p in db["predictions"] if not (p["participantId"] == p_id and p["fixtureId"] == f_id)] + [new_pred]
-                                save_db(db)
+                                save_single_prediction(new_pred)
+                                load_db.clear()
                                 st.success(f"Successfully updated prediction for {sel_participant_name}!")
                                 st.rerun()
 
@@ -1036,9 +853,7 @@ if show_admin_panel:
         st.title("📥 Share & Export")
 
         st.subheader("📊 Excel Audit Report")
-        st.caption("Full standings with every participant's predictions and points per match.")
-        if not participants or not fixtures:
-            st.info("No data available to export yet.")
+        if not participants or not fixtures: st.info("No data available to export yet.")
         else:
             unified_data = []
             match_headers_list = []
@@ -1061,16 +876,20 @@ if show_admin_panel:
                     if pred is not None and pred.get("scoreA") is not None and pred.get("scoreB") is not None:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
                         if is_finished:
-                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], pred.get("advancedTeam"), f.get("advancedTeam"))
-                            if pts == 4: exact_count += 1
-                            if pts >= 3: outcome_count += 1
+                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], f.get("phase", "Group Stage"), pred.get("advancedTeam"), f.get("advancedTeam"))
+                            pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
+                            act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
+                            pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
+                            
+                            if act_outcome == pred_outcome:
+                                outcome_count += 1
+                                if pA == aA and pB == aB: exact_count += 1
+                                    
                             total_score += pts
                             match_breakdowns[match_header] = f"{pred_str} ({pts} pts)"
-                        else:
-                            match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
-                    else:
-                        match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
-                row_data.update({"Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pt)": outcome_count})
+                        else: match_breakdowns[match_header] = pred_str if fixture_all_entered else "Score Submitted"
+                    else: match_breakdowns[match_header] = "---" if (is_finished or fixture_all_entered) else "No Score Yet"
+                row_data.update({"Points": total_score, "Exact (1pt)": exact_count, "Outcome (3pts)": outcome_count})
                 row_data.update(match_breakdowns)
                 unified_data.append(row_data)
             df_export = pd.DataFrame(unified_data).sort_values(by=["Points", "Exact (1pt)"], ascending=[False, False])
@@ -1079,22 +898,16 @@ if show_admin_panel:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False)
             st.download_button(
-                label="📥 Download Excel Audit (.xlsx)",
-                data=output.getvalue(),
-                file_name="Tournament_Audit_Log.xlsx",
-                mime="application/vnd.ms-excel",
-                use_container_width=True,
-                key="admin_excel_export"
+                label="📥 Download Excel Audit (.xlsx)", data=output.getvalue(),
+                file_name="Tournament_Audit_Log.xlsx", mime="application/vnd.ms-excel",
+                use_container_width=True, key="admin_excel_export"
             )
 
         st.divider()
         st.subheader("🗄️ Database Backup")
         st.caption("Raw JSON backup of all participants, fixtures, and predictions.")
         st.download_button(
-            label="📥 Download System Backup (.json)",
-            data=json.dumps(db, indent=4),
-            file_name="system_data_backup.json",
-            mime="application/json",
-            use_container_width=True,
-            key="admin_json_export"
+            label="📥 Download System Backup (.json)", data=json.dumps(db, indent=4),
+            file_name="system_data_backup.json", mime="application/json",
+            use_container_width=True, key="admin_json_export"
         )
