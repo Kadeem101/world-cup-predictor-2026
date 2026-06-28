@@ -576,7 +576,7 @@ if not show_admin_panel:
                                         curr_adv = curr_pred.get("advancedTeam") if curr_pred else None
                                         adv_options = [f['teamA'], f['teamB']]
                                         adv_idx = adv_options.index(curr_adv) if curr_adv in adv_options else 0
-                                        adv_team = st.selectbox("🤝 Match tied after 90 mins! - Choose who wins after ET/Penalties:", adv_options, index=adv_idx, key=f"adv_{f['id']}")
+                                        adv_team = st.selectbox("🤝 Match tied after 90 mins! - Choose who wins via Extra-Time/Penalties:", adv_options, index=adv_idx, key=f"adv_{f['id']}")
 
                                     if st.button("👁️ Preview Prediction", key=f"btn_{f['id']}", use_container_width=True):
                                         st.session_state.staged_pred[f["id"]] = (vA, vB, adv_team)
