@@ -422,9 +422,18 @@ if not show_admin_panel:
                 len(fixtures)
             )
 
-            # Create a window of 10 matches: 5 before the current pending match, and 5 after
-            start_idx = max(0, first_pending_idx - 5)
-            end_idx = min(len(fixtures), start_idx + 10)
+            # Define our fixed window size
+            WINDOW_SIZE = 10
+            
+            # Ideally, start 5 matches before the first pending match
+            ideal_start = first_pending_idx - (WINDOW_SIZE // 2)
+            
+            # Clamp the math: Prevent starting past the point where 10 matches can fit
+            max_start = max(0, len(fixtures) - WINDOW_SIZE)
+            
+            # Final start point: never less than 0, never greater than max_start
+            start_idx = max(0, min(ideal_start, max_start))
+            end_idx = min(len(fixtures), start_idx + WINDOW_SIZE)
             
             # These are the 10 matches that will show up automatically
             default_matches = match_headers_list[start_idx:end_idx]
