@@ -158,17 +158,12 @@ def format_time(time_str):
 def make_auth_token(part_id, pin):
     return hashlib.sha256(f"{part_id}:{pin}:wc2026".encode()).hexdigest()[:20]
 
-def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=None, act_adv=None):
+def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=None, act_adv=None, teamA=None, teamB=None):
     if act_A is None or act_B is None or pred_A is None or pred_B is None: return 0
     pA, pB, aA, aB = int(pred_A), int(pred_B), int(act_A), int(act_B)
     
     phase_clean = str(phase).lower().strip()
     
-    # 💡 FIX: Flat point structure for every phase (this matches the Rules tab,
-    # which has always documented 3 outcome / +1 exact for ALL matches).
-    # Group Stage max = 4 (3+1). Knockout matches additionally qualify for the
-    # +1 advance-pick bonus below, capping every knockout match at 5 max --
-    # the same for Round of 32, R16, QF, SF, 3rd Place, and the Final.
     base_outcome, exact_bonus = 3, 1
         
     act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
@@ -180,7 +175,13 @@ def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=N
         if pA == aA and pB == aB:
             points += exact_bonus
             
-    if "group" not in phase_clean and pred_adv and act_adv and pred_adv == act_adv:
+    # 💡 NEW: Extract implicit advancing team if they predicted a 90-min win
+    implied_pred_adv = pred_adv
+    if not implied_pred_adv and teamA and teamB:
+        if pA > pB: implied_pred_adv = teamA
+        elif pB > pA: implied_pred_adv = teamB
+            
+    if "group" not in phase_clean and implied_pred_adv and act_adv and implied_pred_adv == act_adv:
         points += 1 # Eventual winner bonus
         
     return points
@@ -346,7 +347,8 @@ if not show_admin_panel:
                         if is_finished:
                             pts = compute_points(
                                 pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], 
-                                f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam")
+                                f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam"),
+                                f["teamA"], f["teamB"]
                             )
                             
                             pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
@@ -903,7 +905,11 @@ if show_admin_panel:
                         pred_str = f"{pred['scoreA']}-{pred['scoreB']}"
                         pred_adv = pred.get("advancedTeam")
                         if is_finished:
-                            pts = compute_points(pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam"))
+                            pts = compute_points(
+                                pred["scoreA"], pred["scoreB"], f["scoreA"], f["scoreB"], 
+                                f.get("phase", "Group Stage"), pred_adv, f.get("advancedTeam"), 
+                                f["teamA"], f["teamB"]
+                            )
                             pA, pB, aA, aB = int(pred["scoreA"]), int(pred["scoreB"]), int(f["scoreA"]), int(f["scoreB"])
                             act_outcome = 1 if aA > aB else (2 if aA < aB else 0)
                             pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
