@@ -658,12 +658,50 @@ if not show_admin_panel:
             with c2:
                 st.markdown("#### Knockout Stage")
                 st.markdown("""
-                * **Correct Outcome:** 3 pts *(Win / Draw after 90-Min)*
-                * **Exact Score:** +1 pt bonus *(After 90-Min)*
+                * **Correct Outcome:** 3 pts *(Win / Draw **after 90-Min**)*
+                * **Exact Score:** +1 pt bonus *(**After 90-Min**)*
                 * **Winner Bonus:** +1 pt bonus
-                  *(Only awarded if you predict a Draw after 90-Min and correctly guess who wins via ET/Penalties.)*
+                  *(Awarded when **your pick advances**, even if the match is decided in extra time or on penalties)*
                 * **Max Points:** **5 pts per match**
                 """)
+
+                st.info("""
+                #### Example:
+                **Scenario 1:**
+                * **Your Prediction:** Argentina **2 – 1** France *(You predicted an Argentina win in 90 mins)*
+                * **Actual Result:** Argentina **1 – 1** France after 90 mins *(Argentina wins in extra-time or via a penalty shootout)*
+                
+                **Your Points Breakdown:**
+                * ❌ **0 pts** for the 90-minute outcome *(You predicted a win, it was a draw)*
+                * ⭐ **+1 pt** Winner Bonus *(Because Argentina did actually win in the end)*
+                * **Total Score:** **1 Point**
+                        
+                ----------------------------------
+                        
+                **Scenario 2:**
+                * **Your Prediction:** Argentina **1 – 1** France *(You predicted a draw after 90 mins and Argentina to win in ET/Penalties)*
+                * **Actual Result:** Argentina **1 – 1** France after 90 mins *(Argentina wins in extra-time or via a penalty shootout)*
+                
+                **Your Points Breakdown:**
+                * ⭐ **4 pts** for the 90-minute outcome *(You predicted a draw, with the exact score)*
+                * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
+                * **Total Score:** **5 Point**
+                
+                ----------------------------------
+                        
+                **Scenario 3:**
+                * **Your Prediction:** Argentina **2 – 2** France *(You predicted a draw after 90 mins and Argentina to win in ET/Penalties)*
+                * **Actual Result:** Argentina **1 – 1** France after 90 mins *(Argentina wins in extra-time or via a penalty shootout)*
+                
+                **Your Points Breakdown:**
+                * ⭐ **3 pts** for the 90-minute outcome *(You predicted a draw, which was the correct outcome)*
+                * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
+                * **Total Score:** **4 Point**
+                
+                """)
+
+
+                
             
             st.divider()
             
