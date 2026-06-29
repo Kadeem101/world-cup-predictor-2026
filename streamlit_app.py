@@ -685,7 +685,7 @@ if not show_admin_panel:
                 **Your Points Breakdown:**
                 * ⭐ **4 pts** for the 90-minute outcome *(You predicted a draw, with the exact score)*
                 * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
-                * **Total Score:** **5 Point**
+                * **Total Score:** **5 Points**
                 
                 ----------------------------------
                         
@@ -696,7 +696,7 @@ if not show_admin_panel:
                 **Your Points Breakdown:**
                 * ⭐ **3 pts** for the 90-minute outcome *(You predicted a draw, which was the correct outcome)*
                 * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
-                * **Total Score:** **4 Point**
+                * **Total Score:** **4 Points**
                 
                 """)
 
