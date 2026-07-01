@@ -117,6 +117,12 @@ def update_single_fixture(fixture_data):
         db.fixtures.update_one({"id": fixture_data["id"]}, {"$set": fixture_data}, upsert=True)
     except Exception as e: st.error(f"DB Error: {e}")
 
+def delete_single_prediction(participant_id, fixture_id):
+    try:
+        db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
+        db.predictions.delete_one({"participantId": participant_id, "fixtureId": fixture_id})
+    except Exception as e: st.error(f"DB Error: {e}")
+
 def delete_single_fixture(fixture_id):
     try:
         db = get_mongo_client()[st.secrets["mongodb"]["db_name"]]
@@ -170,19 +176,30 @@ def compute_points(pred_A, pred_B, act_A, act_B, phase="Group Stage", pred_adv=N
     pred_outcome = 1 if pA > pB else (2 if pA < pB else 0)
     
     points = 0
+    
+    # 1. Base points for 90-minute outcome & exact score
     if act_outcome == pred_outcome:
         points += base_outcome
         if pA == aA and pB == aB:
             points += exact_bonus
             
-    # 💡 NEW: Extract implicit advancing team if they predicted a 90-min win
+    # --- ADVANCING TEAM LOGIC ---
     implied_pred_adv = pred_adv
     if not implied_pred_adv and teamA and teamB:
         if pA > pB: implied_pred_adv = teamA
         elif pB > pA: implied_pred_adv = teamB
             
-    if "group" not in phase_clean and implied_pred_adv and act_adv and implied_pred_adv == act_adv:
-        points += 1 # Eventual winner bonus
+    implied_act_adv = act_adv
+    if not implied_act_adv and teamA and teamB:
+        if aA > aB: implied_act_adv = teamA
+        elif aB > aA: implied_act_adv = teamB
+            
+    # 2. Prevent Double-Dipping: Only award the +1 advancing bonus if the user 
+    # DID NOT already get the full 3 outcome points for correctly picking a 90-minute win.
+    if "group" not in phase_clean and implied_pred_adv and implied_act_adv and implied_pred_adv == implied_act_adv:
+        # Blocks the bonus if they already correctly guessed the outright 90-min winner
+        if not (act_outcome == pred_outcome and act_outcome != 0):
+            points += 1
         
     return points
 
@@ -658,10 +675,10 @@ if not show_admin_panel:
             with c2:
                 st.markdown("#### Knockout Stage")
                 st.markdown("""
-                * **Correct Outcome:** 3 pts *(Win / Draw **after 90-Min**)*
-                * **Exact Score:** +1 pt bonus *(**After 90-Min**)*
+                * **Correct Outcome:** 3 pts *(Win / Draw **in 90-Min**)*
+                * **Exact Score:** +1 pt bonus *(**in 90-Min**)*
                 * **Winner Bonus:** +1 pt bonus
-                  *(Awarded when **your pick advances**, even if the match is decided in extra time or on penalties)*
+                  *(Awarded when **your pick advances**, even if the match is decided in extra time or on penalties)* 
                 * **Max Points:** **5 pts per match**
                 """)
 
@@ -674,6 +691,17 @@ if not show_admin_panel:
                 **Your Points Breakdown:**
                 * ❌ **0 pts** for the 90-minute outcome *(You predicted a win, it was a draw)*
                 * ⭐ **+1 pt** Winner Bonus *(Because Argentina did actually win in the end)*
+                * **Total Score:** **1 Point**
+                        
+                **OR**
+                        
+                **(Reverse):**
+                * **Your Prediction:** Argentina **2 – 2** France *(You predicted a draw in 90 mins and Argentina to win in ET/Penalties)*
+                * **Actual Result:** Argentina **2 – 1** France after 90 mins *(Argentina wins in 90 mins)*
+                
+                **Your Points Breakdown:**
+                 * ❌ **0 pts** for the 90-minute outcome *(You predicted a draw, it was a win)*
+                * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
                 * **Total Score:** **1 Point**
                         
                 ----------------------------------
@@ -696,8 +724,7 @@ if not show_admin_panel:
                 **Your Points Breakdown:**
                 * ⭐ **3 pts** for the 90-minute outcome *(You predicted a draw, which was the correct outcome)*
                 * ⭐ **+1 pt** Winner Bonus *(Because Argentina won)*
-                * **Total Score:** **4 Points**
-                
+                * **Total Score:** **4 Points** 
                 """)
 
 
@@ -908,12 +935,23 @@ if show_admin_panel:
                             new_sa = c1.number_input(f"{tA} Score", 0, 20, int(curr_pred["scoreA"]) if curr_pred else 0, key="ovr_A")
                             new_sb = c2.number_input(f"{tB} Score", 0, 20, int(curr_pred["scoreB"]) if curr_pred else 0, key="ovr_B")
                             
-                            if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
-                                new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
-                                save_single_prediction(new_pred)
-                                load_db.clear()
-                                st.success(f"Successfully updated prediction for {sel_participant_name}!")
-                                st.rerun()
+                            c3, c4 = st.columns(2)
+                            with c3:
+                                if st.button("🚨 Force Update Score", use_container_width=True, type="primary"):
+                                    new_pred = {"participantId": p_id, "fixtureId": f_id, "scoreA": new_sa, "scoreB": new_sb}
+                                    save_single_prediction(new_pred)
+                                    load_db.clear()
+                                    st.success(f"Successfully updated prediction for {sel_participant_name}!")
+                                    st.rerun()
+                            
+                            with c4:
+                                # Only show the delete button if a prediction actually exists to be deleted
+                                if curr_pred:
+                                    if st.button("🗑️ Delete Prediction", use_container_width=True):
+                                        delete_single_prediction(p_id, f_id)
+                                        load_db.clear()
+                                        st.success(f"Prediction removed! {sel_participant_name} can now re-enter their score.")
+                                        st.rerun()
 
     elif admin_menu == "📥 Share & Export":
         st.title("📥 Share & Export")
